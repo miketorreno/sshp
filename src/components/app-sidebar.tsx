@@ -65,7 +65,7 @@ const data = {
           url: "/patients/outpatients",
         },
         {
-          title: "Admitted Patients",
+          title: "Admitted",
           url: "/patients/admitted",
         },
         {
