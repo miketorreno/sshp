@@ -70,20 +70,21 @@ model User {
   avatar             String?
   departmentId       String?
   department         Department?                @relation(fields: [departmentId], references: [id])
+  visits             Visit[]
   appointments       Appointment[]
   authoredNotes      ClinicalNote[]
   createdVisits      Visit[]                    @relation("CreatedBy")
   updatedVisits      Visit[]                    @relation("UpdatedBy")
   medAdministrations MedicationAdministration[]
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  deletedAt          DateTime?
   Vitals             Vitals[]
   Diagnosis          Diagnosis[]
   MedicationOrder    MedicationOrder[]
   LabOrder           LabOrder[]
   ImagingOrder       ImagingOrder[]
   Procedure          Procedure[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  deletedAt          DateTime?
 
   @@index([email])
 }
@@ -135,6 +136,8 @@ model Visit {
   id            String            @id @default(cuid())
   patientId     String
   patient       Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerId    String?
+  provider      User?             @relation(fields: [providerId], references: [id])
   visitType     VisitType
   reason        String?
   startDateTime DateTime          @default(now())

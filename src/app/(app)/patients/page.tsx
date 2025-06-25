@@ -10,7 +10,7 @@ const PatientsPage = () => {
         <h1 className="text-3xl font-bold">Patients</h1>
         <Link href="/patients/add">
           <Button>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus />
             Add Patient
           </Button>
         </Link>

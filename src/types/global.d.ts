@@ -1,5 +1,19 @@
+interface User {
+  id: string;
+  email: string;
+  password: string | null;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isActive: boolean;
+  avatar: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime | null;
+  deletedAt: Datetime | null;
+}
 interface Patient {
   id: string;
+  patientCode: string;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -8,28 +22,44 @@ interface Patient {
   bloodGroup: string | null;
   placeOfBirth: string | null;
   occupation: string | null;
-  phone: string;
-  email: string;
+  phone: string | null;
+  email: string | null;
   address: string | null;
   country: string | null;
-  patientStatus: string | null;
   guardian: string | null;
   referredBy: string | null;
   referredDate: Datetime | null;
+  patientStatus: string | null;
   patientType: string;
   createdAt: Datetime;
   updatedAt: Datetime | null;
   deletedAt: Datetime | null;
 }
 
-interface User {
+interface Visit {
   id: string;
-  name: string;
-  email: string;
-  emailVerified: Datetime | null;
-  image: string | null;
-  password: string | null;
-  role: string;
+  patientId: string;
+  providerId: string;
+  visitType: string;
+  reason: string | null;
+  startDateTime: Datetime;
+  endDateTime: Datetime | null;
+  createdAt: Datetime;
+  updatedAt: Datetime | null;
+  deletedAt: Datetime | null;
+}
+
+interface Outpatient {
+  id: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  gender: string;
+  dateOfBirth: string;
+  visitType: string;
+  reason: string | null;
+  startDateTime: Datetime;
+  endDateTime: Datetime | null;
   createdAt: Datetime;
   updatedAt: Datetime | null;
   deletedAt: Datetime | null;

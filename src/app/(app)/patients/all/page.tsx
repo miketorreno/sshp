@@ -92,7 +92,7 @@ const AllPatientsPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Full Name</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Blood</TableHead>
@@ -104,7 +104,7 @@ const AllPatientsPage = () => {
               <TableBody>
                 {filteredPatients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-12">
                       No patients found
                     </TableCell>
                   </TableRow>

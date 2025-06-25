@@ -1,8 +1,7 @@
 "use client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, UserCheck2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -17,43 +16,48 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { calculateAge } from "@/lib/utils";
-
-interface Patient {
-  id: string;
-  name: string;
-  dateOfBirth: string;
-  gender: string;
-  status: string;
-  appointments: {
-    id: string;
-    date: string;
-    status: string;
-  }[];
-}
+import { toast } from "sonner";
+import Link from "next/link";
 
 const OutpatientsPage = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
+  const [outpatients, setOutpatients] = useState<Outpatient[]>([]);
+
+  const fetchOutpatients = async () => {
+    try {
+      const response = await fetch("/api/patients/outpatients");
+      if (!response.ok) {
+        throw new Error("Failed to fetch outpatients");
+      }
+
+      const data = await response.json();
+      setOutpatients(data);
+    } catch (error) {
+      console.error("Error: ", error);
+      toast.error("Failed to load outpatients");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOutpatients();
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Outpatients</h1>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search outpatients..."
-              className="pl-8"
-              value={searchTerm}
-            />
-          </div>
-        </div>
+        <h1 className="text-2xl font-bold my-2">Today&apos;s Outpatients</h1>
+        <Link href="/visits/checkin">
+          <Button>
+            <UserCheck2 />
+            Patient Check-in
+          </Button>
+        </Link>
       </div>
 
       <Card>
@@ -66,33 +70,46 @@ const OutpatientsPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Full Name</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
+                  <TableHead>Visit Type</TableHead>
+                  <TableHead>Check In</TableHead>
                   <TableHead>Last Visit</TableHead>
                   <TableHead>Next Appointment</TableHead>
+                  <TableHead>Examiner</TableHead>
+                  <TableHead>Orders</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPatients.length === 0 ? (
+                {outpatients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={11} className="text-center py-12">
                       No outpatients found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredPatients.map((patient) => (
+                  outpatients.map((patient) => (
                     <TableRow key={patient.id}>
-                      <TableCell>{patient.name}</TableCell>
+                      <TableCell>
+                        {patient.firstName} {patient.middleName}{" "}
+                        {patient.lastName}
+                      </TableCell>
                       <TableCell>
                         {calculateAge(new Date(patient.dateOfBirth))}
                       </TableCell>
                       <TableCell>{patient.gender}</TableCell>
-                      <TableCell>{getLastVisitDate(patient)}</TableCell>
-                      <TableCell>{getNextAppointmentDate(patient)}</TableCell>
-                      <TableCell>Active</TableCell>
+                      <TableCell>{patient.visitType}</TableCell>
+                      <TableCell>{patient.startDateTime}</TableCell>
+                      <TableCell></TableCell>
+                      {/* <TableCell>{getLastVisitDate(patient)}</TableCell> */}
+                      <TableCell></TableCell>
+                      {/* <TableCell>{getNextAppointmentDate(patient)}</TableCell> */}
+                      <TableCell>Examiner</TableCell>
+                      <TableCell>Orders</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
