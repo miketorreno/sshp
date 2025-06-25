@@ -24,7 +24,7 @@ const AddPatientPage = () => {
     lastName: "",
     dateOfBirth: "",
     gender: "",
-    bloodType: "",
+    bloodGroup: "",
     placeOfBirth: "",
     occupation: "",
     phone: "",
@@ -161,11 +161,11 @@ const AddPatientPage = () => {
               </div>
 
               <div className="grid gap-3">
-                <Label htmlFor="bloodType">Blood Type</Label>
+                <Label htmlFor="bloodGroup">Blood Type</Label>
                 <Select
                   required
                   onValueChange={(value) =>
-                    handleSelectChange("bloodType", value)
+                    handleSelectChange("bloodGroup", value)
                   }
                 >
                   <SelectTrigger>

@@ -182,11 +182,11 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="bloodType">Blood Type</Label>
+                  <Label htmlFor="bloodGroup">Blood Type</Label>
                   <Select
                     required
                     onValueChange={(value) =>
-                      handleSelectChange("bloodType", value)
+                      handleSelectChange("bloodGroup", value)
                     }
                   >
                     <SelectTrigger>

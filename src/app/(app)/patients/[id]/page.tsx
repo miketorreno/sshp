@@ -102,7 +102,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         Blood
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        {patient?.bloodType}
+                        {patient?.bloodGroup}
                       </p>
                     </div>
                     <div className="my-3">
@@ -246,7 +246,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </TableCell>
                       <TableCell>{visits.dateOfBirth}</TableCell>
                       <TableCell>{visits.gender}</TableCell>
-                      <TableCell>{visits.bloodType}</TableCell>
+                      <TableCell>{visits.bloodGroup}</TableCell>
                       <TableCell>{visits.patientType}</TableCell>
                       <TableCell className="capitalize">
                         {visits.patientStatus}

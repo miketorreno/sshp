@@ -5,7 +5,7 @@ interface Patient {
   lastName: string;
   dateOfBirth: Datetime;
   gender: string;
-  bloodType: string | null;
+  bloodGroup: string | null;
   placeOfBirth: string | null;
   occupation: string | null;
   phone: string;

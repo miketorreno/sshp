@@ -30,7 +30,7 @@ const POST = async (request: NextRequest) => {
         lastName: body.lastName,
         dateOfBirth: new Date(body.dateOfBirth),
         gender: body.gender,
-        bloodType: body.bloodType || null,
+        bloodGroup: body.bloodGroup || null,
         placeOfBirth: body.placeOfBirth || null,
         occupation: body.occupation || null,
         phone: body.phone,

@@ -117,7 +117,7 @@ const AllPatientsPage = () => {
                       </TableCell>
                       <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
                       <TableCell>{patient.gender}</TableCell>
-                      <TableCell>{patient.bloodType}</TableCell>
+                      <TableCell>{patient.bloodGroup}</TableCell>
                       <TableCell className="capitalize">
                         {patient.patientStatus}
                       </TableCell>
