@@ -15,24 +15,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { calculateAge, formatDate } from "@/lib/utils";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const [loading, setLoading] = useState(true);
-  const [patient, setPatient] = useState(null);
+  const [patient, setPatient] = useState<Patient>();
 
   const fetchPatient = async () => {
     const { id } = await params;
-    console.log("patientId: ", id);
 
     try {
       const response = await fetch(`/api/patients/${id}`);
-      console.log("Response: ", response);
+
+      if (response.status === 404) {
+        throw new Error("Patient not found");
+      }
 
       if (!response.ok) {
-        throw new Error("Failed to fetch patient");
+        const error = await response.json();
+        throw new Error(error.error || "Failed to fetch appointment");
       }
 
       const data = await response.json();
@@ -53,7 +57,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
     <div className="flex flex-col gap-4">
       <Card className="mb-8">
         <CardContent>
-          {patient ? (
+          {loading ? (
             <div className="flex justify-center items-center h-40">
               <p>Loading patient...</p>
             </div>
@@ -69,9 +73,10 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     className="rounded-full"
                   />
                   <h3 className="text-2xl font-semibold tracking-tight mt-8 mb-4">
-                    Jane Doe
+                    {patient?.firstName} {patient?.middleName}{" "}
+                    {patient?.lastName}
                   </h3>
-                  <Button variant="outline">Edit Profile</Button>
+                  <Button size={"sm"}>Edit Profile</Button>
                 </div>
 
                 <div className="col-span-2">
@@ -80,32 +85,40 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       <p className="text-muted-foreground text-sm leading-6">
                         Gender
                       </p>
-                      <p className="font-semibold text-sm leading-6">Male</p>
+                      <p className="font-semibold text-sm leading-6">
+                        {patient?.gender}
+                      </p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Age
                       </p>
-                      <p className="font-semibold text-sm leading-6">22</p>
+                      <p className="font-semibold text-sm leading-6">
+                        {calculateAge(patient?.dateOfBirth)}
+                      </p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Blood
                       </p>
-                      <p className="font-semibold text-sm leading-6">AB</p>
+                      <p className="font-semibold text-sm leading-6">
+                        {patient?.bloodType}
+                      </p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Status
                       </p>
-                      <p className="font-semibold text-sm leading-6">Active</p>
+                      <p className="font-semibold text-sm leading-6">
+                        {patient?.patientStatus}
+                      </p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Phone
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        +251 912 345 678
+                        {patient?.phone}
                       </p>
                     </div>
                     <div className="my-3">
@@ -113,21 +126,21 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         Email
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        someone@gmail.com
+                        {patient?.email}
                       </p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Appointment
                       </p>
-                      <p className="font-semibold text-sm leading-6">12</p>
+                      <p className="font-semibold text-sm leading-6"></p>
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Registered
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        Apr 3, 2025
+                        {formatDate(patient?.createdAt)}
                       </p>
                     </div>
                   </div>

@@ -67,7 +67,7 @@ const AddPatientPage = () => {
         throw new Error(data.error || "Failed to add patient");
       }
 
-      toast.success("Patient added successfully");
+      toast.success("Patient added");
       router.push(`/patients/${data.id}`);
     } catch (error) {
       console.error("Error: ", error);
@@ -153,9 +153,9 @@ const AddPatientPage = () => {
                     <SelectValue placeholder="" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -172,14 +172,14 @@ const AddPatientPage = () => {
                     <SelectValue placeholder="" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="a+">A+</SelectItem>
-                    <SelectItem value="a-">A-</SelectItem>
-                    <SelectItem value="b+">B+</SelectItem>
-                    <SelectItem value="b-">B-</SelectItem>
-                    <SelectItem value="ab+">AB+</SelectItem>
-                    <SelectItem value="ab-">AB-</SelectItem>
-                    <SelectItem value="o+">O+</SelectItem>
-                    <SelectItem value="o-">O-</SelectItem>
+                    <SelectItem value="A+">A+</SelectItem>
+                    <SelectItem value="A-">A-</SelectItem>
+                    <SelectItem value="B+">B+</SelectItem>
+                    <SelectItem value="B-">B-</SelectItem>
+                    <SelectItem value="AB+">AB+</SelectItem>
+                    <SelectItem value="AB-">AB-</SelectItem>
+                    <SelectItem value="O+">O+</SelectItem>
+                    <SelectItem value="O-">O-</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

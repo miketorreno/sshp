@@ -20,9 +20,8 @@ const GET = async () => {
 };
 
 const POST = async (request: NextRequest) => {
+  // TODO: zod validation here...
   try {
-    // TODO: zod validation here...
-
     const body = await request.json();
     const patient = await prisma.patient.create({
       data: {

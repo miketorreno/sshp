@@ -7,15 +7,36 @@ export function cn(...inputs: ClassValue[]) {
 
 export function calculateAge(dateOfBirth: Date): number {
   const today = new Date();
-  let age = today.getFullYear() - dateOfBirth.getFullYear();
-  const monthDifference = today.getMonth() - dateOfBirth.getMonth();
+  const dob = new Date(dateOfBirth);
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDifference = today.getMonth() - dob.getMonth();
 
   if (
     monthDifference < 0 ||
-    (monthDifference === 0 && today.getDate() < dateOfBirth.getDate())
+    (monthDifference === 0 && today.getDate() < dob.getDate())
   ) {
     age--;
   }
 
   return age;
+}
+
+export function formatDate(date: Date) {
+  const dt = new Date(date);
+  return dt.toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+export function formatDateTime(date: Date) {
+  const dt = new Date(date);
+  return dt.toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

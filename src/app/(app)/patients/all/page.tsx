@@ -44,6 +44,28 @@ const AllPatientsPage = () => {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to delete this patient?")) {
+      try {
+        const response = await fetch(`/api/patients/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete patient");
+        }
+
+        setFilteredPatients((prev) =>
+          prev.filter((patient) => patient.id !== id)
+        );
+        toast.success("Patient deleted");
+      } catch (error) {
+        console.error("Error deleting patient:", error);
+        toast.error("Failed to delete patient");
+      }
+    }
+  };
+
   useEffect(() => {
     fetchPatients();
   }, []);
@@ -74,7 +96,6 @@ const AllPatientsPage = () => {
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Blood</TableHead>
-                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
@@ -94,12 +115,9 @@ const AllPatientsPage = () => {
                         {patient.firstName} {patient.middleName}{" "}
                         {patient.lastName}
                       </TableCell>
-                      <TableCell>
-                        {calculateAge(new Date(patient.dateOfBirth))}
-                      </TableCell>
+                      <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
                       <TableCell>{patient.gender}</TableCell>
                       <TableCell>{patient.bloodType}</TableCell>
-                      <TableCell>{patient.patientType}</TableCell>
                       <TableCell className="capitalize">
                         {patient.patientStatus}
                       </TableCell>
@@ -133,7 +151,10 @@ const AllPatientsPage = () => {
                             >
                               Medical History
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => handleDelete(patient.id)}
+                            >
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
