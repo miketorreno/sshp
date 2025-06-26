@@ -1,13 +1,8 @@
 "use client";
-
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import { z } from "zod";
-
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Command,
   CommandEmpty,
@@ -17,99 +12,137 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { searchPatients } from "@/app/actions/patient-actions";
+import { useEffect, useId, useState } from "react";
 
-const languages = [
-  { label: "English", value: "en" },
-  { label: "French", value: "fr" },
-  { label: "German", value: "de" },
-  { label: "Spanish", value: "es" },
-  { label: "Portuguese", value: "pt" },
-  { label: "Russian", value: "ru" },
-  { label: "Japanese", value: "ja" },
-  { label: "Korean", value: "ko" },
-  { label: "Chinese", value: "zh" },
-] as const;
+interface PatientComboboxProps {
+  defaultValue: Patient | null;
+  onSelectChange: (value: Patient | null) => void;
+}
 
-export function PatientCombobox() {
+// A custom hook to debounce the search, which is a crucial performance pattern
+const useDebouncedSearch = (query: string) => {
+  const [result, setResult] = useState<{
+    patients?: Patient[];
+    error?: string;
+    isLoading: boolean;
+  }>({
+    patients: [],
+    error: undefined,
+    isLoading: false,
+  });
+
+  useEffect(() => {
+    if (!query) {
+      setResult({ patients: [], error: undefined, isLoading: false });
+      return;
+    }
+
+    setResult((prev) => ({ ...prev, isLoading: true }));
+
+    const handler = setTimeout(() => {
+      searchPatients(query).then((response) => {
+        setResult({ ...response, isLoading: false });
+      });
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [query]);
+
+  return result;
+};
+
+export function PatientCombobox({
+  defaultValue,
+  onSelectChange,
+}: PatientComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(defaultValue);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const { patients, error, isLoading } = useDebouncedSearch(searchQuery);
+  const triggerId = useId();
+
   return (
-    <FormField
-      control={form.control}
-      name="language"
-      render={({ field }) => (
-        <FormItem className="flex flex-col">
-          <FormLabel>Language</FormLabel>
-          <Popover>
-            <PopoverTrigger asChild>
-              <FormControl>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className={cn(
-                    "w-[200px] justify-between",
-                    !field.value && "text-muted-foreground"
-                  )}
-                >
-                  {field.value
-                    ? languages.find(
-                        (language) => language.value === field.value
-                      )?.label
-                    : "Select language"}
-                  <ChevronsUpDown className="opacity-50" />
-                </Button>
-              </FormControl>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0">
-              <Command>
-                <CommandInput
-                  placeholder="Search framework..."
-                  className="h-9"
-                />
-                <CommandList>
-                  <CommandEmpty>No framework found.</CommandEmpty>
-                  <CommandGroup>
-                    {languages.map((language) => (
-                      <CommandItem
-                        value={language.label}
-                        key={language.value}
-                        onSelect={() => {
-                          form.setValue("language", language.value);
-                        }}
-                      >
-                        {language.label}
-                        <Check
-                          className={cn(
-                            "ml-auto",
-                            language.value === field.value
-                              ? "opacity-100"
-                              : "opacity-0"
-                          )}
-                        />
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          <FormDescription>
-            This is the language that will be used in the dashboard.
-          </FormDescription>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
+    <div className="grid w-full gap-3">
+      <Label htmlFor={triggerId}>
+        Patient<span className="text-red-500">*</span>
+      </Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id={triggerId}
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-[250px] justify-between"
+            onClick={() => selectedPatient && onSelectChange(selectedPatient)}
+          >
+            {selectedPatient ? selectedPatient.email : "Select a patient..."}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+
+        <PopoverContent className="w-[250px] p-0">
+          <Command shouldFilter={false}>
+            {" "}
+            <CommandInput
+              placeholder="Search patient..."
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+            />
+            <CommandList>
+              {isLoading && (
+                <div className="p-2 flex justify-center items-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+
+              {!isLoading && !error && patients?.length === 0 && (
+                <CommandEmpty>No patient found.</CommandEmpty>
+              )}
+
+              {error && <p className="p-2 text-sm text-red-500">{error}</p>}
+
+              <CommandGroup>
+                {patients?.map((patient) => (
+                  <CommandItem
+                    key={patient.id}
+                    value={patient.id}
+                    onSelect={() => {
+                      setSelectedPatient(patient);
+                      onSelectChange(patient);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        selectedPatient?.id === patient.id
+                          ? "opacity-100"
+                          : "opacity-0"
+                      )}
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {patient.firstName} {patient.middleName}{" "}
+                        {patient.lastName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {patient.email}
+                      </span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

@@ -101,7 +101,7 @@ model Patient {
   placeOfBirth  String?
   occupation    String?
   phone         String?
-  email         String?
+  email         String
   address       String?
   country       String?
   guardian      String?
@@ -142,10 +142,10 @@ model Visit {
   reason        String?
   startDateTime DateTime          @default(now())
   endDateTime   DateTime?
-  createdById   String
-  createdBy     User              @relation("CreatedBy", fields: [createdById], references: [id])
-  updatedById   String
-  updatedBy     User              @relation("UpdatedBy", fields: [updatedById], references: [id])
+  createdById   String?
+  createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
+  updatedById   String?
+  updatedBy     User?             @relation("UpdatedBy", fields: [updatedById], references: [id])
   vitals        Vitals[]
   diagnoses     Diagnosis[]
   medOrders     MedicationOrder[]

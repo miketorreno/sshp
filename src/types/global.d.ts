@@ -23,14 +23,14 @@ interface Patient {
   placeOfBirth: string | null;
   occupation: string | null;
   phone: string | null;
-  email: string | null;
+  email: string;
   address: string | null;
   country: string | null;
   guardian: string | null;
   referredBy: string | null;
   referredDate: Datetime | null;
   patientStatus: string | null;
-  patientType: string;
+  patientType: string | null;
   createdAt: Datetime;
   updatedAt: Datetime | null;
   deletedAt: Datetime | null;
@@ -39,7 +39,7 @@ interface Patient {
 interface Visit {
   id: string;
   patientId: string;
-  providerId: string;
+  providerId: string | null;
   visitType: string;
   reason: string | null;
   startDateTime: Datetime;

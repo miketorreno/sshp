@@ -14,12 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { PatientCombobox } from "@/components/patient-combobox";
 
 const CheckInPage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [formData, setFormData] = useState({
-    patient: "",
+    patient: selectedPatient?.id,
     examiner: "",
     startDateTime: "",
     visitType: "",
@@ -37,12 +39,16 @@ const CheckInPage = () => {
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
+  const handleComboChange = (id: string, value: Patient | null) => {
+    setFormData((prev) => ({ ...prev, [id]: value?.id || "" }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/patients", {
+      const response = await fetch("/api/visits", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -52,14 +58,14 @@ const CheckInPage = () => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add patient");
+        throw new Error(data.error || "Failed to add visit");
       }
 
-      toast.success("Patient added");
-      router.push(`/patients/${data.id}`);
+      toast.success("Visit added");
+      router.push(`/visits/${data.id}`);
     } catch (error) {
       console.error("Error: ", error);
-      toast.error("Failed to add patient");
+      toast.error("Failed to add visit");
     } finally {
       setIsSubmitting(false);
     }
@@ -76,15 +82,11 @@ const CheckInPage = () => {
           <form className="space-y-12" onSubmit={handleSubmit}>
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
-                <Label htmlFor="patient">
-                  Patient<span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="patient"
-                  placeholder=""
-                  required
-                  value={formData.patient}
-                  onChange={handleChange}
+                <PatientCombobox
+                  defaultValue={selectedPatient}
+                  onSelectChange={(value) =>
+                    value && handleComboChange("patient", value)
+                  }
                 />
               </div>
 
