@@ -259,26 +259,6 @@ const AddPatientPage = () => {
 
             <hr />
 
-            {/* <div className="grid md:grid-cols-2 gap-10">
-              <div className="grid gap-3">
-                <Label htmlFor="height">Height</Label>
-                <Input
-                  id="height"
-                  type="number"
-                  placeholder=""
-                />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="weight">Weight</Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  placeholder=""
-                />
-              </div>
-            </div> */}
-
             <div className="grid md:grid-cols-2 gap-10">
               <div className="grid gap-3">
                 <Label htmlFor="status">Patient Status</Label>

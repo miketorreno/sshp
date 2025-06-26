@@ -129,13 +129,11 @@ const CheckInPage = () => {
                     <SelectValue placeholder="" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="INPATIENT">Inpatient</SelectItem>
-                    <SelectItem value="OUTPATIENT">Outpatient</SelectItem>
-                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
                     <SelectItem value="CLINIC">Clinic</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
                     <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
-                    <SelectItem value="LAB">Lab</SelectItem>
                     <SelectItem value="IMAGING">Imaging</SelectItem>
+                    <SelectItem value="LAB">Lab</SelectItem>
                     <SelectItem value="PHARMACY">Pharmacy</SelectItem>
                   </SelectContent>
                 </Select>

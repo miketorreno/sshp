@@ -13,45 +13,48 @@ datasource db {
 // -------------------------------------------
 
 enum Role {
-  USER
   ADMIN
   DOCTOR
+  IMAGING_TECHNICIAN
+  LAB_TECHNICIAN
   NURSE
   PHARMACIST
   RECEPTIONIST
-  LAB_TECHNICIAN
-  IMAGING_TECHNICIAN
+  USER
 }
 
 enum Gender {
-  MALE
   FEMALE
+  MALE
   OTHER
 }
 
 enum VisitType {
-  INPATIENT
-  OUTPATIENT
-  EMERGENCY
   CLINIC
+  EMERGENCY
   FOLLOWUP
-  LAB
   IMAGING
+  LAB
   PHARMACY
 }
 
+enum PatientType {
+  INPATIENT
+  OUTPATIENT
+}
+
 enum AppointmentStatus {
-  SCHEDULED
-  COMPLETED
   CANCELLED
+  COMPLETED
   NO_SHOW
+  SCHEDULED
 }
 
 enum OrderStatus {
-  REQUESTED
-  IN_PROGRESS
-  COMPLETED
   CANCELLED
+  COMPLETED
+  IN_PROGRESS
+  REQUESTED
 }
 
 // -------------------------------------------

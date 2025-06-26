@@ -36,7 +36,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to fetch appointment");
+        throw new Error(error.error || "Failed to fetch patient");
       }
 
       const data = await response.json();
@@ -64,7 +64,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
           ) : (
             <div className="space-y-12">
               <div className="grid md:grid-cols-3 gap-4">
-                <div className="">
+                <div>
                   <Image
                     src="https://placehold.co/100x100/png"
                     width={100}
@@ -80,7 +80,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
 
                 <div className="col-span-2">
-                  <div className="grid grid-cols-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3">
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Gender
