@@ -30,6 +30,14 @@ export function formatDate(date: Date) {
   });
 }
 
+export function formatTime(date: Date) {
+  const dt = new Date(date);
+  return dt.toLocaleString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function formatDateTime(date: Date) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {

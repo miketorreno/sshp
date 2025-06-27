@@ -18,6 +18,7 @@ enum Role {
   IMAGING_TECHNICIAN
   LAB_TECHNICIAN
   NURSE
+  PATIENT
   PHARMACIST
   RECEPTIONIST
   USER
@@ -104,14 +105,14 @@ model Patient {
   placeOfBirth  String?
   occupation    String?
   phone         String?
-  email         String
+  email         String        @unique
   address       String?
   country       String?
   guardian      String?
   referredBy    String?
   referredDate  DateTime?
   patientStatus String?
-  patientType   String?
+  patientType   PatientType   @default(OUTPATIENT)
   visits        Visit[]
   appointments  Appointment[]
   createdAt     DateTime      @default(now())

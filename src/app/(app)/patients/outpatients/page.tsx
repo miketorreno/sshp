@@ -18,14 +18,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { calculateAge } from "@/lib/utils";
+import { calculateAge, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 
 const OutpatientsPage = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [outpatients, setOutpatients] = useState<Outpatient[]>([]);
+  const [outpatients, setOutpatients] = useState<PatientVisit[]>([]);
 
   const fetchOutpatients = async () => {
     try {
@@ -91,23 +91,34 @@ const OutpatientsPage = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  outpatients.map((patient) => (
-                    <TableRow key={patient.id}>
+                  outpatients.map((outpatient) => (
+                    <TableRow key={outpatient.id}>
                       <TableCell>
-                        {patient.firstName} {patient.middleName}{" "}
-                        {patient.lastName}
+                        {outpatient.patient.firstName}{" "}
+                        {outpatient.patient.middleName}{" "}
+                        {outpatient.patient.lastName}
                       </TableCell>
                       <TableCell>
-                        {calculateAge(new Date(patient.dateOfBirth))}
+                        {calculateAge(outpatient.patient.dateOfBirth)}
                       </TableCell>
-                      <TableCell>{patient.gender}</TableCell>
-                      <TableCell>{patient.visitType}</TableCell>
-                      <TableCell>{patient.startDateTime}</TableCell>
+                      <TableCell>{outpatient.patient.gender}</TableCell>
+                      <TableCell>{outpatient.visitType}</TableCell>
+                      <TableCell>
+                        {formatTime(outpatient.startDateTime)}
+                      </TableCell>
                       <TableCell></TableCell>
                       {/* <TableCell>{getLastVisitDate(patient)}</TableCell> */}
                       <TableCell></TableCell>
                       {/* <TableCell>{getNextAppointmentDate(patient)}</TableCell> */}
-                      <TableCell>Examiner</TableCell>
+                      <TableCell>
+                        {outpatient?.provider &&
+                          outpatient?.provider.role === "DOCTOR" && (
+                            <h4 className="text-xl font-semibold">
+                              {outpatient.provider.firstName}{" "}
+                              {outpatient.provider.lastName}
+                            </h4>
+                          )}
+                      </TableCell>
                       <TableCell>Orders</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>
@@ -120,7 +131,7 @@ const OutpatientsPage = () => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
                               onClick={() =>
-                                router.push(`/patients/${patient.id}`)
+                                router.push(`/visits/${outpatient.id}`)
                               }
                             >
                               View Details
@@ -128,7 +139,7 @@ const OutpatientsPage = () => {
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(
-                                  `/patients/${patient.id}/appointments/new`
+                                  `/patients/${outpatient.patient.id}/appointments/new`
                                 )
                               }
                             >
@@ -136,7 +147,9 @@ const OutpatientsPage = () => {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
-                                router.push(`/patients/${patient.id}/history`)
+                                router.push(
+                                  `/patients/${outpatient.patient.id}/history`
+                                )
                               }
                             >
                               Medical History
@@ -144,7 +157,7 @@ const OutpatientsPage = () => {
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(
-                                  `/patients/${patient.id}/prescriptions/new`
+                                  `/patients/${outpatient.patient.id}/prescriptions/new`
                                 )
                               }
                             >

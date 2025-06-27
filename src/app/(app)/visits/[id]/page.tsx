@@ -89,7 +89,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </p>
                       <p className="font-semibold text-sm leading-6">
                         {patientVisit?.startDateTime &&
-                          formatDateTime(new Date(patientVisit.startDateTime))}
+                          formatDateTime(patientVisit.startDateTime)}
                       </p>
                     </div>
                     {patientVisit?.endDateTime && (
@@ -98,7 +98,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                           Checked Out
                         </p>
                         <p className="font-semibold text-sm leading-6">
-                          {formatDateTime(new Date(patientVisit.endDateTime))}
+                          {formatDateTime(patientVisit.endDateTime)}
                         </p>
                       </div>
                     )}

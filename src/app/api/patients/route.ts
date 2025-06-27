@@ -9,6 +9,10 @@ const GET = async () => {
       },
     });
 
+    if (!patients) {
+      return NextResponse.json({ msg: "No patients found" });
+    }
+
     return NextResponse.json(patients);
   } catch (error) {
     console.error("Error fetching patients: ", error);

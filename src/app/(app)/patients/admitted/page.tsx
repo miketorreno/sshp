@@ -1,8 +1,7 @@
 "use client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -17,30 +16,37 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { calculateAge } from "@/lib/utils";
-
-interface Admission {
-  id: string;
-  roomNumber: string;
-  admissionDate: string;
-  diagnosis: string | null;
-  status: string;
-  patient: {
-    id: string;
-    name: string;
-    dateOfBirth: string;
-    gender: string;
-  };
-}
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 const AdmittedPatientsPage = () => {
   const router = useRouter();
-  const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredAdmissions, setFilteredAdmissions] = useState<Admission[]>([]);
+  const [admittedPatients, setAdmittedPatients] = useState<PatientVisit[]>([]);
+
+  const fetchAdmittedPatients = async () => {
+    try {
+      const response = await fetch("/api/patients/admitted");
+      if (!response.ok) {
+        throw new Error("Failed to fetch admitted patients");
+      }
+
+      const data = await response.json();
+      setAdmittedPatients(data);
+    } catch (err) {
+      console.error("Error: ", err);
+      toast.error("Failed to load admitted patients");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdmittedPatients();
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,11 +55,7 @@ const AdmittedPatientsPage = () => {
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search admitted patients..."
-              className="pl-8"
-              value={searchTerm}
-            />
+            <Input placeholder="Search admitted patients..." className="pl-8" />
           </div>
         </div>
       </div>
@@ -68,37 +70,44 @@ const AdmittedPatientsPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Full Name</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Room</TableHead>
                   <TableHead>Admission Date</TableHead>
                   <TableHead>Diagnosis</TableHead>
+                  <TableHead>Orders</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAdmissions.length === 0 ? (
+                {admittedPatients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-4">
+                    <TableCell colSpan={11} className="text-center py-12">
                       No admitted patients found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAdmissions.map((admission) => (
-                    <TableRow key={admission.id}>
-                      <TableCell>{admission.patient.name}</TableCell>
+                  admittedPatients.map((admittedPatient) => (
+                    <TableRow key={admittedPatient.id}>
                       <TableCell>
-                        {calculateAge(new Date(admission.patient.dateOfBirth))}
+                        {admittedPatient.patient.firstName}{" "}
+                        {admittedPatient.patient.middleName}{" "}
+                        {admittedPatient.patient.lastName}
                       </TableCell>
-                      <TableCell>{admission.patient.gender}</TableCell>
-                      <TableCell>{admission.roomNumber}</TableCell>
                       <TableCell>
-                        {formatDate(admission.admissionDate)}
+                        {calculateAge(admittedPatient.patient.dateOfBirth)}
                       </TableCell>
-                      <TableCell>{admission.diagnosis || "-"}</TableCell>
-                      <TableCell>Stable</TableCell>
+                      <TableCell>{admittedPatient.patient.gender}</TableCell>
+                      <TableCell></TableCell>
+                      {/* <TableCell>{admittedPatient.roomNumber}</TableCell> */}
+                      <TableCell></TableCell>
+                      {/* <TableCell>{admittedPatient.admissionDate}</TableCell> */}
+                      <TableCell></TableCell>
+                      {/* <TableCell>{admittedPatient.diagnosis}</TableCell> */}
+                      <TableCell>Orders</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -109,7 +118,7 @@ const AdmittedPatientsPage = () => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
                               onClick={() =>
-                                router.push(`/patients/${admission.patient.id}`)
+                                router.push(`/visits/${admittedPatient.id}`)
                               }
                             >
                               View Details
@@ -117,22 +126,30 @@ const AdmittedPatientsPage = () => {
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(
-                                  `/patients/${admission.patient.id}/update-status`
+                                  `/patients/${admittedPatient.patient.id}/appointments/new`
                                 )
                               }
                             >
-                              Update Status
+                              Schedule Appointment
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(
-                                  `/patients/${admission.patient.id}/history`
+                                  `/patients/${admittedPatient.patient.id}/history`
                                 )
                               }
                             >
                               Medical History
                             </DropdownMenuItem>
-                            <DropdownMenuItem>Discharge</DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(
+                                  `/patients/${admittedPatient.patient.id}/prescriptions/new`
+                                )
+                              }
+                            >
+                              Prescribe Medication
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

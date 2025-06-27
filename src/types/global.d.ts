@@ -30,7 +30,7 @@ interface Patient {
   referredBy: string | null;
   referredDate: Datetime | null;
   patientStatus: string | null;
-  patientType: string | null;
+  patientType: string;
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;
@@ -55,18 +55,18 @@ interface PatientVisit {
   providerId: string | null;
   visitType: string;
   reason: string | null;
-  startDateTime: string;
-  endDateTime: string | null;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
+  startDateTime: Datetime;
+  endDateTime: Datetime | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
   patient: {
     id: string;
     patientCode: string;
     firstName: string;
     middleName: string;
     lastName: string;
-    dateOfBirth: string;
+    dateOfBirth: Datetime;
     gender: string;
     bloodGroup: string | null;
     placeOfBirth: string | null;
@@ -77,12 +77,12 @@ interface PatientVisit {
     country: string | null;
     guardian: string | null;
     referredBy: string | null;
-    referredDate: string | null;
+    referredDate: Datetime | null;
     patientStatus: string | null;
     patientType: string | null;
-    createdAt: string;
-    updatedAt: string;
-    deletedAt: string | null;
+    createdAt: Datetime;
+    updatedAt: Datetime;
+    deletedAt: Datetime | null;
   };
   provider: {
     id: string;
@@ -97,20 +97,4 @@ interface PatientVisit {
     updatedAt: Datetime;
     deletedAt: Datetime | null;
   };
-}
-
-interface Outpatient {
-  id: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  gender: string;
-  dateOfBirth: string;
-  visitType: string;
-  reason: string | null;
-  startDateTime: Datetime;
-  endDateTime: Datetime | null;
-  createdAt: Datetime;
-  updatedAt: Datetime;
-  deletedAt: Datetime | null;
 }
