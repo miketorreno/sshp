@@ -121,7 +121,7 @@ const AdmittedPatientsPage = () => {
                                 router.push(`/visits/${admittedPatient.id}`)
                               }
                             >
-                              View Details
+                              View
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>

@@ -12,10 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTime } from "@/lib/utils";
 import { LogOut, Plus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [patientVisit, setPatientVisit] = useState<PatientVisit>();
 
@@ -50,6 +52,10 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold my-2">Visit Information</h1>
+      </div>
+
       <Card className="mb-8">
         <CardContent>
           {loading ? (
@@ -68,7 +74,6 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       {patientVisit?.patient.lastName}
                     </h4>
                   </div>
-
                   <div className="my-4">
                     <span className="text-muted-foreground">Examiner</span>
                     {patientVisit?.provider &&
@@ -79,6 +84,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         </h4>
                       )}
                   </div>
+                  <Link href={`/visits/${patientVisit?.id}/edit`}>
+                    <Button size={"sm"}>Edit Visit</Button>
+                  </Link>
                 </div>
 
                 <div className="col-span-2">
@@ -304,12 +312,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
           </Tabs>
 
           <div className="mt-20 flex flex-row-reverse gap-2">
-            <Link href="/patients/add">
-              <Button size={"sm"}>Back</Button>
-            </Link>
-            <Link href="/patients/add">
-              <Button size={"sm"}>Update</Button>
-            </Link>
+            <Button type="button" onClick={() => router.back()} size={"sm"}>
+              Back
+            </Button>
             <Link href="/patients/add">
               <Button size={"sm"}>
                 <LogOut />

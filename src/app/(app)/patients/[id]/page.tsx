@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { calculateAge, formatDate } from "@/lib/utils";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -41,8 +42,8 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
       const data = await response.json();
       setPatient(data);
-    } catch (error) {
-      console.error("Error: ", error);
+    } catch (err) {
+      console.error("Error: ", err);
       toast.error("Failed to load patient");
     } finally {
       setLoading(false);
@@ -55,6 +56,10 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold my-2">Patient Profile</h1>
+      </div>
+
       <Card className="mb-8">
         <CardContent>
           {loading ? (
@@ -76,7 +81,9 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     {patient?.firstName} {patient?.middleName}{" "}
                     {patient?.lastName}
                   </h3>
-                  <Button size={"sm"}>Edit Profile</Button>
+                  <Link href={`/patients/${patient?.id}/edit`}>
+                    <Button size={"sm"}>Edit Profile</Button>
+                  </Link>
                 </div>
 
                 <div className="col-span-2">

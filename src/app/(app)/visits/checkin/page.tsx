@@ -108,7 +108,7 @@ const CheckInPage = () => {
                 </Label>
                 <Input
                   id="startDateTime"
-                  type="date"
+                  type="datetime-local"
                   required
                   value={formData.startDateTime}
                   onChange={handleChange}

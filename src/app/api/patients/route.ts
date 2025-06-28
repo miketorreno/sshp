@@ -30,22 +30,9 @@ const POST = async (request: NextRequest) => {
     const body = await request.json();
     const patient = await prisma.patient.create({
       data: {
-        firstName: body.firstName,
-        middleName: body.middleName,
-        lastName: body.lastName,
+        ...body,
         dateOfBirth: new Date(body.dateOfBirth),
-        gender: body.gender,
-        bloodGroup: body.bloodGroup || null,
-        placeOfBirth: body.placeOfBirth || null,
-        occupation: body.occupation || null,
-        phone: body.phone,
-        email: body.email,
-        address: body.address || null,
-        country: body.country || null,
-        patientStatus: body.patientStatus || null,
-        guardian: body.guardian || null,
-        referredBy: body.referredBy || null,
-        referredDate: new Date(body.referredDate) || null,
+        referredDate: body.referredDate ? new Date(body.referredDate) : null,
       },
     });
 

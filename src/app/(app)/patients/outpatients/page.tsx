@@ -134,7 +134,14 @@ const OutpatientsPage = () => {
                                 router.push(`/visits/${outpatient.id}`)
                               }
                             >
-                              View Details
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/visits/${outpatient.id}/edit`)
+                              }
+                            >
+                              Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>

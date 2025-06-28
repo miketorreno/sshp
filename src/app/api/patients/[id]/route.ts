@@ -39,40 +39,23 @@ const PUT = async (
     const body = await request.json();
 
     const existingPatient = await prisma.patient.findUnique({
-      where: {
-        id: id,
-      },
+      where: { id: id },
     });
 
     if (!existingPatient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    const patient = await prisma.patient.update({
-      where: {
-        id: id,
-      },
+    const updatedPatient = await prisma.patient.update({
+      where: { id: id },
       data: {
-        firstName: body.firstName,
-        middleName: body.middleName,
-        lastName: body.lastName,
+        ...body,
         dateOfBirth: new Date(body.dateOfBirth),
-        gender: body.gender,
-        bloodGroup: body.bloodGroup || null,
-        placeOfBirth: body.placeOfBirth || null,
-        occupation: body.occupation || null,
-        phone: body.phone,
-        email: body.email,
-        address: body.address || null,
-        country: body.country || null,
-        patientStatus: body.patientStatus || null,
-        guardian: body.guardian || null,
-        referredBy: body.referredBy || null,
-        referredDate: new Date(body.referredDate) || null,
+        referredDate: body.referredDate ? new Date(body.referredDate) : null,
       },
     });
 
-    return NextResponse.json(patient);
+    return NextResponse.json(updatedPatient);
   } catch (error) {
     console.error("Error updating patient:", error);
     return NextResponse.json(

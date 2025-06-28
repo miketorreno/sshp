@@ -69,8 +69,8 @@ const AddPatientPage = () => {
 
       toast.success("Patient added");
       router.push(`/patients/${data.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
+    } catch (err) {
+      console.error("Error: ", err);
       toast.error("Failed to add patient");
     } finally {
       setIsSubmitting(false);
@@ -80,7 +80,7 @@ const AddPatientPage = () => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">New Patient</h1>
+        <h1 className="text-2xl font-bold my-2">Add Patient</h1>
       </div>
 
       <Card>

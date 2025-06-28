@@ -42,45 +42,31 @@ const PUT = async (
     const id = (await params).id;
     const body = await request.json();
 
-    const existingPatient = await prisma.patient.findUnique({
+    const existingVisit = await prisma.visit.findUnique({
       where: {
         id: id,
       },
     });
 
-    if (!existingPatient) {
+    if (!existingVisit) {
       return NextResponse.json({ error: "Visit not found" }, { status: 404 });
     }
 
-    const patient = await prisma.patient.update({
+    const visit = await prisma.visit.update({
       where: {
         id: id,
       },
       data: {
-        firstName: body.firstName,
-        middleName: body.middleName,
-        lastName: body.lastName,
-        dateOfBirth: new Date(body.dateOfBirth),
-        gender: body.gender,
-        bloodGroup: body.bloodGroup || null,
-        placeOfBirth: body.placeOfBirth || null,
-        occupation: body.occupation || null,
-        phone: body.phone,
-        email: body.email,
-        address: body.address || null,
-        country: body.country || null,
-        patientStatus: body.patientStatus || null,
-        guardian: body.guardian || null,
-        referredBy: body.referredBy || null,
-        referredDate: new Date(body.referredDate) || null,
+        ...body,
+        startDateTime: new Date(body.startDateTime),
       },
     });
 
-    return NextResponse.json(patient);
+    return NextResponse.json(visit);
   } catch (error) {
-    console.error("Error updating patient:", error);
+    console.error("Error updating visit:", error);
     return NextResponse.json(
-      { error: "Failed to update patient" },
+      { error: "Failed to update visit" },
       { status: 500 }
     );
   }

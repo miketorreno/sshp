@@ -29,15 +29,13 @@ const POST = async (request: NextRequest) => {
     const body = await request.json();
     const visit = await prisma.visit.create({
       data: {
+        ...body,
+        startDateTime: new Date(body.startDateTime),
         patient: {
           connect: {
             id: body.patient,
           },
         },
-        provider: body.provider,
-        visitType: body.visitType,
-        reason: body.reason,
-        startDateTime: new Date(body.startDateTime),
       },
     });
 

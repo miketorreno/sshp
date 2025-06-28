@@ -10,56 +10,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { Textarea } from "@/components/ui/textarea";
+import { formatFetchedDate } from "@/lib/utils";
 
 const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  // const [patient, setPatient] = useState<Patient>();
+  const [patient, setPatient] = useState<Patient>();
   const [formData, setFormData] = useState<Patient>();
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch("/api/patients", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to add patient");
-      }
-
-      toast.success("Patient added");
-      router.push(`/patients/${data.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to add patient");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dateOfBirthValue, setDateOfBirthValue] = useState("");
+  const [referredDateValue, setReferredDateValue] = useState("");
 
   const fetchPatient = async () => {
     const { id } = await params;
@@ -73,14 +37,14 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to fetch appointment");
+        throw new Error(error.error || "Failed to fetch patient");
       }
 
       const data = await response.json();
+      setPatient(data);
       setFormData(data);
-      // setPatient(data);
-    } catch (error) {
-      console.error("Error: ", error);
+    } catch (err) {
+      console.error("Error: ", err);
       toast.error("Failed to load patient");
     } finally {
       setLoading(false);
@@ -91,13 +55,68 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
     fetchPatient();
   }, []);
 
+  useEffect(() => {
+    if (patient) {
+      setDateOfBirthValue(formatFetchedDate(patient.dateOfBirth));
+      setReferredDateValue(
+        patient.referredDate ? formatFetchedDate(patient.referredDate) : ""
+      );
+    }
+  }, [patient]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { id, value } = e.target;
+
+    if (id === "dateOfBirth") {
+      setDateOfBirthValue(value);
+    } else if (id === "referredDate") {
+      setReferredDateValue(value);
+    }
+
+    setFormData((prev) => ({ ...prev, [id]: value } as Patient));
+  };
+
+  const handleSelectChange = (id: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [id]: value } as Patient));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/patients/${patient?.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update patient");
+      }
+
+      toast.success("Patient updated");
+      router.push(`/patients/${data.id}`);
+    } catch (err) {
+      console.error("Error: ", err);
+      toast.error("Failed to update patient");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Update Patient</h1>
+        <h1 className="text-2xl font-bold my-2">Edit Patient</h1>
       </div>
 
-      <Card>
+      <Card className="mb-8">
         <CardContent>
           {loading ? (
             <div className="flex justify-center items-center h-40">
@@ -155,7 +174,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     id="dateOfBirth"
                     type="date"
                     required
-                    value={formData?.dateOfBirth}
+                    value={dateOfBirthValue}
                     onChange={handleChange}
                   />
                 </div>
@@ -166,6 +185,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   </Label>
                   <Select
                     required
+                    value={patient?.gender}
                     onValueChange={(value) =>
                       handleSelectChange("gender", value)
                     }
@@ -185,6 +205,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   <Label htmlFor="bloodGroup">Blood Type</Label>
                   <Select
                     required
+                    value={patient?.bloodGroup ?? ""}
                     onValueChange={(value) =>
                       handleSelectChange("bloodGroup", value)
                     }
@@ -206,13 +227,13 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
               </div>
 
-              {/* <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-2 gap-10">
                 <div className="grid gap-3">
                   <Label htmlFor="placeOfBirth">Place of Birth</Label>
                   <Textarea
                     id="placeOfBirth"
                     placeholder=""
-                    value={formData?.placeOfBirth}
+                    value={formData?.placeOfBirth ?? ""}
                     onChange={handleChange}
                   />
                 </div>
@@ -222,11 +243,11 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   <Textarea
                     id="occupation"
                     placeholder=""
-                    value={formData?.occupation}
+                    value={formData?.occupation ?? ""}
                     onChange={handleChange}
                   />
                 </div>
-              </div> */}
+              </div>
 
               <div className="grid md:grid-cols-2 gap-10">
                 <div className="grid gap-3">
@@ -237,7 +258,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     id="phone"
                     type="tel"
                     placeholder=""
-                    value={formData?.phone}
+                    value={formData?.phone ?? ""}
                     onChange={handleChange}
                   />
                 </div>
@@ -256,13 +277,13 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
               </div>
 
-              {/* <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-2 gap-10">
                 <div className="grid gap-3">
                   <Label htmlFor="address">Address</Label>
                   <Textarea
                     id="address"
                     placeholder=""
-                    value={formData?.address}
+                    value={formData?.address ?? ""}
                     onChange={handleChange}
                   />
                 </div>
@@ -272,42 +293,22 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   <Textarea
                     id="country"
                     placeholder=""
-                    value={formData?.country}
+                    value={formData?.country ?? ""}
                     onChange={handleChange}
                   />
                 </div>
-              </div> */}
+              </div>
 
               <hr />
 
-              {/* <div className="grid md:grid-cols-2 gap-10">
-              <div className="grid gap-3">
-                <Label htmlFor="height">Height</Label>
-                <Input
-                  id="height"
-                  type="number"
-                  placeholder=""
-                />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="weight">Weight</Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  placeholder=""
-                />
-              </div>
-            </div> */}
-
-              {/* <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-2 gap-10">
                 <div className="grid gap-3">
                   <Label htmlFor="status">Patient Status</Label>
                   <Input
                     id="status"
                     type="text"
                     placeholder=""
-                    value={formData?.patientStatus}
+                    value={formData?.patientStatus ?? ""}
                     onChange={handleChange}
                   />
                 </div>
@@ -318,20 +319,20 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     id="guardian"
                     type="text"
                     placeholder=""
-                    value={formData?.guardian}
+                    value={formData?.guardian ?? ""}
                     onChange={handleChange}
                   />
                 </div>
-              </div> */}
+              </div>
 
-              {/* <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-2 gap-10">
                 <div className="grid gap-3">
                   <Label htmlFor="referredBy">Referred By</Label>
                   <Input
                     id="referredBy"
                     type="text"
                     placeholder=""
-                    value={formData?.referredBy}
+                    value={formData?.referredBy ?? ""}
                     onChange={handleChange}
                   />
                 </div>
@@ -342,14 +343,21 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     id="referredDate"
                     type="date"
                     placeholder=""
-                    value={formData?.referredDate}
+                    value={referredDateValue}
                     onChange={handleChange}
                   />
                 </div>
-              </div> */}
+              </div>
 
-              <Button type="submit" className="mt-4" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                className="mt-4 mr-2"
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? "Updating..." : "Update Patient"}
+              </Button>
+              <Button type="button" onClick={() => router.back()}>
+                Back
               </Button>
             </form>
           )}
