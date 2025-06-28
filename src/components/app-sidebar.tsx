@@ -1,6 +1,4 @@
 "use client";
-
-import * as React from "react";
 import {
   AudioWaveform,
   CalendarDays,
@@ -65,7 +63,7 @@ const data = {
           url: "/patients/outpatients",
         },
         {
-          title: "Admitted Patients",
+          title: "Admitted",
           url: "/patients/admitted",
         },
         {

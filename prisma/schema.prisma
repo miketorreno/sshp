@@ -1,0 +1,368 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------
+// ENUMS: For data consistency and type safety
+// -------------------------------------------
+
+enum Role {
+  ADMIN
+  DOCTOR
+  IMAGING_TECHNICIAN
+  LAB_TECHNICIAN
+  NURSE
+  PATIENT
+  PHARMACIST
+  RECEPTIONIST
+  USER
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+}
+
+enum VisitType {
+  CLINIC
+  EMERGENCY
+  FOLLOWUP
+  IMAGING
+  LAB
+  PHARMACY
+}
+
+enum PatientType {
+  INPATIENT
+  OUTPATIENT
+}
+
+enum AppointmentStatus {
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+  SCHEDULED
+}
+
+enum OrderStatus {
+  CANCELLED
+  COMPLETED
+  IN_PROGRESS
+  REQUESTED
+}
+
+// -------------------------------------------
+// CORE MODELS
+// -------------------------------------------
+
+model User {
+  id                 String                     @id @default(cuid())
+  email              String                     @unique
+  emailVerified      DateTime?
+  password           String
+  firstName          String
+  lastName           String
+  role               Role                       @default(USER)
+  isActive           Boolean                    @default(true)
+  avatar             String?
+  departmentId       String?
+  department         Department?                @relation(fields: [departmentId], references: [id])
+  visits             Visit[]
+  appointments       Appointment[]
+  authoredNotes      ClinicalNote[]
+  createdVisits      Visit[]                    @relation("CreatedBy")
+  updatedVisits      Visit[]                    @relation("UpdatedBy")
+  medAdministrations MedicationAdministration[]
+  Vitals             Vitals[]
+  Diagnosis          Diagnosis[]
+  MedicationOrder    MedicationOrder[]
+  LabOrder           LabOrder[]
+  ImagingOrder       ImagingOrder[]
+  Procedure          Procedure[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  deletedAt          DateTime?
+
+  @@index([email])
+}
+
+model Patient {
+  id            String        @id @default(cuid())
+  patientCode   String        @unique @default(cuid())
+  firstName     String
+  middleName    String
+  lastName      String
+  dateOfBirth   DateTime
+  gender        String
+  bloodGroup    String?
+  placeOfBirth  String?
+  occupation    String?
+  phone         String?
+  email         String        @unique
+  address       String?
+  country       String?
+  guardian      String?
+  referredBy    String?
+  referredDate  DateTime?
+  patientStatus String?
+  patientType   PatientType   @default(OUTPATIENT)
+  visits        Visit[]
+  appointments  Appointment[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  @@index([patientCode, email])
+}
+
+model Department {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  staff       User[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+// -------------------------------------------
+// CLINICAL WORKFLOW MODELS
+// -------------------------------------------
+
+model Visit {
+  id            String            @id @default(cuid())
+  patientId     String
+  patient       Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerId    String?
+  provider      User?             @relation(fields: [providerId], references: [id])
+  visitType     VisitType
+  reason        String?
+  startDateTime DateTime          @default(now())
+  endDateTime   DateTime?
+  createdById   String?
+  createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
+  updatedById   String?
+  updatedBy     User?             @relation("UpdatedBy", fields: [updatedById], references: [id])
+  vitals        Vitals[]
+  diagnoses     Diagnosis[]
+  medOrders     MedicationOrder[]
+  labOrders     LabOrder[]
+  imagingOrders ImagingOrder[]
+  procedures    Procedure[]
+  notes         ClinicalNote[]
+  appointmentId String?           @unique
+  appointment   Appointment?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  @@index([patientId, appointmentId])
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  scheduledTime DateTime
+  durationMins  Int               @default(30)
+  status        AppointmentStatus @default(SCHEDULED)
+  reason        String?
+  patientId     String
+  patient       Patient           @relation(fields: [patientId], references: [id])
+  providerId    String
+  provider      User              @relation(fields: [providerId], references: [id])
+  visit         Visit?            @relation(fields: [appointmentId], references: [id])
+  appointmentId String?           @unique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  @@index([patientId, providerId, appointmentId])
+}
+
+// Vitals recorded during a visit
+model Vitals {
+  id                     String    @id @default(cuid())
+  recordedAt             DateTime  @default(now())
+  bloodPressureSystolic  Int?
+  bloodPressureDiastolic Int?
+  heartRate              Int?
+  temperatureCelsius     Float?
+  respiratoryRate        Int?
+  oxygenSaturation       Float?
+  glucose                Int?
+  cholesterol            Int?
+  visitId                String
+  visit                  Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  recordedById           String
+  recordedBy             User      @relation(fields: [recordedById], references: [id])
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  @@index([visitId])
+}
+
+// Diagnoses made during a visit
+model Diagnosis {
+  id            String    @id @default(cuid())
+  icd10Code     String // Standardized diagnosis code (e.g., "J45.909")
+  description   String
+  isPrimary     Boolean   @default(false)
+  diagnosedAt   DateTime  @default(now())
+  visitId       String
+  visit         Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  diagnosedById String
+  diagnosedBy   User      @relation(fields: [diagnosedById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([visitId])
+}
+
+// -------------------------------------------
+// ORDERS & RESULTS MODELS
+// -------------------------------------------
+
+model MedicationOrder {
+  id              String                     @id @default(cuid())
+  dosage          String // e.g., "500mg"
+  frequency       String // e.g., "Twice a day"
+  route           String // e.g., "Oral", "IV"
+  status          OrderStatus                @default(REQUESTED)
+  notes           String?
+  orderedAt       DateTime                   @default(now())
+  visitId         String
+  visit           Visit                      @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  medicationId    String
+  medication      Medication                 @relation(fields: [medicationId], references: [id])
+  orderedById     String
+  orderedBy       User                       @relation(fields: [orderedById], references: [id])
+  administrations MedicationAdministration[]
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  deletedAt       DateTime?
+
+  @@index([visitId])
+}
+
+// Record of a specific medication being given
+model MedicationAdministration {
+  id               String          @id @default(cuid())
+  administeredAt   DateTime        @default(now())
+  notes            String?
+  medOrderId       String
+  medOrder         MedicationOrder @relation(fields: [medOrderId], references: [id])
+  administeredById String
+  administeredBy   User            @relation(fields: [administeredById], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+}
+
+model LabOrder {
+  id          String      @id @default(cuid())
+  status      OrderStatus @default(REQUESTED)
+  orderedAt   DateTime    @default(now())
+  visitId     String
+  visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  orderedById String
+  orderedBy   User        @relation(fields: [orderedById], references: [id])
+  labTests    LabTest[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  @@index([visitId])
+}
+
+model LabTest {
+  id          String    @id @default(cuid())
+  testName    String // e.g., "Complete Blood Count", "Lipid Panel"
+  result      String? // Can be simple text or JSON for structured results
+  notes       String?
+  completedAt DateTime?
+  labOrderId  String
+  labOrder    LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([labOrderId])
+}
+
+model ImagingOrder {
+  id          String      @id @default(cuid())
+  studyType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
+  reason      String
+  status      OrderStatus @default(REQUESTED)
+  report      String? // The radiologist's report
+  orderedAt   DateTime    @default(now())
+  completedAt DateTime?
+  visitId     String
+  visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  orderedById String
+  orderedBy   User        @relation(fields: [orderedById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  @@index([visitId])
+}
+
+// Records of procedures performed
+model Procedure {
+  id            String    @id @default(cuid())
+  cptCode       String? // Standardized procedure code
+  description   String
+  notes         String?
+  performedAt   DateTime  @default(now())
+  visitId       String
+  visit         Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  performedById String
+  performedBy   User      @relation(fields: [performedById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([visitId])
+}
+
+// -------------------------------------------
+// DICTIONARY & NOTES MODELS
+// -------------------------------------------
+
+// A master list of all medications available
+model Medication {
+  id            String            @id @default(cuid())
+  name          String            @unique // Generic name, e.g., "Ibuprofen"
+  brandName     String? // e.g., "Advil"
+  description   String?
+  stockQuantity Int               @default(0)
+  medOrders     MedicationOrder[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+}
+
+// General purpose clinical notes
+model ClinicalNote {
+  id        String    @id @default(cuid())
+  noteType  String // e.g., "Progress Note", "Discharge Summary", "Consultation"
+  content   String    @db.Text
+  visitId   String
+  visit     Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([visitId])
+}

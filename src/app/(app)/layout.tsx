@@ -39,7 +39,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
             </Breadcrumb>
           </div>
         </header>
-        <div className="p-6 bg-gray-100 min-h-11/12">{children}</div>
+        <div className="p-6 bg-gray-100 min-h-10/12">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
