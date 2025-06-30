@@ -28,7 +28,7 @@ const GET = async () => {
     });
 
     if (!outpatientsToday) {
-      return NextResponse.json({ msg: "No outpatients today" });
+      return NextResponse.json({ msg: "No outpatients found" });
     }
 
     return NextResponse.json(outpatientsToday);

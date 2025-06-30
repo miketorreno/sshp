@@ -26,7 +26,7 @@ const PatientReportsPage = () => {
               <SelectItem value="year">Last Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button>
+          <Button type="button">
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>

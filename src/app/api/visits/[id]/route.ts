@@ -57,8 +57,9 @@ const PUT = async (
         id: id,
       },
       data: {
-        ...body,
         startDateTime: new Date(body.startDateTime),
+        reason: body.reason,
+        visitType: body.visitType,
       },
     });
 

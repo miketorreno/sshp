@@ -9,7 +9,7 @@ const PatientsPage = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Patients</h1>
         <Link href="/patients/add">
-          <Button>
+          <Button type="button">
             <Plus />
             Add Patient
           </Button>

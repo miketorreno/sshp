@@ -82,7 +82,9 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     {patient?.lastName}
                   </h3>
                   <Link href={`/patients/${patient?.id}/edit`}>
-                    <Button size={"sm"}>Edit Profile</Button>
+                    <Button type="button" size={"sm"}>
+                      Edit Patient
+                    </Button>
                   </Link>
                 </div>
 
