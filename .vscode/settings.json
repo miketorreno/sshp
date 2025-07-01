@@ -1,5 +1,6 @@
 {
   "editor.tabSize": 2,
   "codeium.enableCodeLens": false,
-  "cSpell.words": ["cuid", "sonner"]
+  "cSpell.words": ["cuid", "daygrid", "fullcalendar", "sonner", "timegrid"],
+  "postman.settings.dotenv-detection-notification-visibility": false
 }

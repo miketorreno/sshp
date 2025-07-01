@@ -44,10 +44,20 @@ enum PatientType {
   OUTPATIENT
 }
 
+enum AppointmentType {
+  ADMISSION
+  CLINIC
+  EMERGENCY
+  FOLLOWUP
+  IMAGING
+  LAB
+  PHARMACY
+}
+
 enum AppointmentStatus {
+  ATTENDED
   CANCELLED
-  COMPLETED
-  NO_SHOW
+  MISSED
   SCHEDULED
 }
 
@@ -167,22 +177,23 @@ model Visit {
 }
 
 model Appointment {
-  id            String            @id @default(cuid())
-  scheduledTime DateTime
-  durationMins  Int               @default(30)
-  status        AppointmentStatus @default(SCHEDULED)
-  reason        String?
-  patientId     String
-  patient       Patient           @relation(fields: [patientId], references: [id])
-  providerId    String
-  provider      User              @relation(fields: [providerId], references: [id])
-  visit         Visit?            @relation(fields: [appointmentId], references: [id])
-  appointmentId String?           @unique
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  deletedAt     DateTime?
+  id                String            @id @default(cuid())
+  patientId         String
+  patient           Patient           @relation(fields: [patientId], references: [id])
+  providerId        String?
+  provider          User?             @relation(fields: [providerId], references: [id])
+  appointmentId     String?           @unique
+  visit             Visit?            @relation(fields: [appointmentId], references: [id])
+  startDateTime     DateTime
+  endDateTime       DateTime
+  appointmentType   AppointmentType
+  appointmentStatus AppointmentStatus @default(SCHEDULED)
+  reason            String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
 
-  @@index([patientId, providerId, appointmentId])
+  @@index([patientId, providerId])
 }
 
 // Vitals recorded during a visit

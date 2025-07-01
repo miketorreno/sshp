@@ -97,7 +97,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Visit Information</h1>
+        <h1 className="text-2xl font-bold my-2">Visit Info</h1>
       </div>
 
       <Card className="mb-8">
@@ -127,16 +127,6 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </h4>
                     </Link>
                   </div>
-                  <div className="my-4">
-                    <span className="text-muted-foreground">Examiner</span>
-                    {patientVisit?.provider &&
-                      patientVisit?.provider.role === "DOCTOR" && (
-                        <h4 className="text-xl font-semibold">
-                          {patientVisit.provider.firstName}{" "}
-                          {patientVisit.provider.lastName}
-                        </h4>
-                      )}
-                  </div>
                   <Link href={`/visits/${patientVisit?.id}/edit`}>
                     <Button type="button" size={"sm"}>
                       Edit Visit
@@ -146,6 +136,16 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
                 <div className="col-span-2">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="my-3">
+                      <span className="text-muted-foreground">Examiner</span>
+                      {patientVisit?.provider &&
+                        patientVisit?.provider.role === "DOCTOR" && (
+                          <h4 className="text-xl font-semibold">
+                            {patientVisit.provider.firstName}{" "}
+                            {patientVisit.provider.lastName}
+                          </h4>
+                        )}
+                    </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Checked In
@@ -185,7 +185,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     </div>
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
-                        Reason for Visit
+                        Reason
                       </p>
                       <p className="font-semibold text-sm leading-6">
                         {patientVisit?.reason}

@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PatientCombobox } from "@/components/patient-combobox";
 
-const CheckInPage = () => {
+const AddAppointmentPage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -24,7 +24,9 @@ const CheckInPage = () => {
     patient: selectedPatient?.id,
     examiner: "",
     startDateTime: "",
-    visitType: "",
+    endDateTime: "",
+    appointmentType: "",
+    appointmentStatus: "SCHEDULED",
     reason: "",
   });
 
@@ -48,7 +50,7 @@ const CheckInPage = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/visits", {
+      const response = await fetch("/api/appointments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -58,14 +60,14 @@ const CheckInPage = () => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add visit");
+        throw new Error(data.error || "Failed to add appointment");
       }
 
-      toast.success("Visit added");
-      router.push(`/visits/${data.id}`);
+      toast.success("Appointment added");
+      router.push(`/appointments/all`);
     } catch (error) {
       console.error("Error: ", error);
-      toast.error("Failed to add visit");
+      toast.error("Failed to add appointment");
     } finally {
       setIsSubmitting(false);
     }
@@ -74,7 +76,7 @@ const CheckInPage = () => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Patient Check In</h1>
+        <h1 className="text-2xl font-bold my-2">Add Appointment</h1>
       </div>
 
       <Card>
@@ -104,7 +106,7 @@ const CheckInPage = () => {
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
                 <Label htmlFor="startDateTime">
-                  Check In<span className="text-red-500">*</span>
+                  Start Date<span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="startDateTime"
@@ -116,25 +118,61 @@ const CheckInPage = () => {
               </div>
 
               <div className="grid gap-3">
-                <Label htmlFor="visitType">
+                <Label htmlFor="endDateTime">
+                  End Date<span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="endDateTime"
+                  type="datetime-local"
+                  required
+                  value={formData.endDateTime}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="appointmentType">
                   Type<span className="text-red-500">*</span>
                 </Label>
                 <Select
                   required
                   onValueChange={(value) =>
-                    handleSelectChange("visitType", value)
+                    handleSelectChange("appointmentType", value)
                   }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="ADMISSION">Admission</SelectItem>
                     <SelectItem value="CLINIC">Clinic</SelectItem>
                     <SelectItem value="EMERGENCY">Emergency</SelectItem>
                     <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
                     <SelectItem value="IMAGING">Imaging</SelectItem>
                     <SelectItem value="LAB">Lab</SelectItem>
                     <SelectItem value="PHARMACY">Pharmacy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-3">
+                <Label htmlFor="appointmentStatus">Status</Label>
+                <Select
+                  defaultValue={formData.appointmentStatus}
+                  onValueChange={(value) =>
+                    handleSelectChange("appointmentStatus", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ATTENDED">Attended</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    <SelectItem value="MISSED">Missed</SelectItem>
+                    <SelectItem value="SCHEDULED">Scheduled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -153,7 +191,7 @@ const CheckInPage = () => {
             </div>
 
             <Button type="submit" className="mt-4" disabled={isSubmitting}>
-              {isSubmitting ? "Checking in..." : "Check-in"}
+              {isSubmitting ? "Adding..." : "Add Appointment"}
             </Button>
           </form>
         </CardContent>
@@ -162,4 +200,4 @@ const CheckInPage = () => {
   );
 };
 
-export default CheckInPage;
+export default AddAppointmentPage;
