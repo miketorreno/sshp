@@ -64,7 +64,7 @@ enum AppointmentStatus {
 enum OrderStatus {
   CANCELLED
   COMPLETED
-  IN_PROGRESS
+  PENDING
   REQUESTED
 }
 
@@ -152,14 +152,16 @@ model Visit {
   patient       Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
   providerId    String?
   provider      User?             @relation(fields: [providerId], references: [id])
-  visitType     VisitType
-  reason        String?
-  startDateTime DateTime          @default(now())
-  endDateTime   DateTime?
   createdById   String?
   createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
   updatedById   String?
   updatedBy     User?             @relation("UpdatedBy", fields: [updatedById], references: [id])
+  appointmentId String?           @unique
+  appointment   Appointment?
+  visitType     VisitType
+  startDateTime DateTime          @default(now())
+  endDateTime   DateTime?
+  reason        String?
   vitals        Vitals[]
   diagnoses     Diagnosis[]
   medOrders     MedicationOrder[]
@@ -167,8 +169,6 @@ model Visit {
   imagingOrders ImagingOrder[]
   procedures    Procedure[]
   notes         ClinicalNote[]
-  appointmentId String?           @unique
-  appointment   Appointment?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   deletedAt     DateTime?
@@ -210,8 +210,8 @@ model Vitals {
   cholesterol            Int?
   visitId                String
   visit                  Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  recordedById           String
-  recordedBy             User      @relation(fields: [recordedById], references: [id])
+  recordedById           String?
+  recordedBy             User?     @relation(fields: [recordedById], references: [id])
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
@@ -228,8 +228,8 @@ model Diagnosis {
   diagnosedAt   DateTime  @default(now())
   visitId       String
   visit         Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  diagnosedById String
-  diagnosedBy   User      @relation(fields: [diagnosedById], references: [id])
+  diagnosedById String?
+  diagnosedBy   User?     @relation(fields: [diagnosedById], references: [id])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
@@ -246,15 +246,15 @@ model MedicationOrder {
   dosage          String // e.g., "500mg"
   frequency       String // e.g., "Twice a day"
   route           String // e.g., "Oral", "IV"
-  status          OrderStatus                @default(REQUESTED)
+  orderStatus     OrderStatus                @default(REQUESTED)
   notes           String?
   orderedAt       DateTime                   @default(now())
   visitId         String
   visit           Visit                      @relation(fields: [visitId], references: [id], onDelete: Cascade)
   medicationId    String
   medication      Medication                 @relation(fields: [medicationId], references: [id])
-  orderedById     String
-  orderedBy       User                       @relation(fields: [orderedById], references: [id])
+  orderedById     String?
+  orderedBy       User?                      @relation(fields: [orderedById], references: [id])
   administrations MedicationAdministration[]
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
@@ -270,8 +270,8 @@ model MedicationAdministration {
   notes            String?
   medOrderId       String
   medOrder         MedicationOrder @relation(fields: [medOrderId], references: [id])
-  administeredById String
-  administeredBy   User            @relation(fields: [administeredById], references: [id])
+  administeredById String?
+  administeredBy   User?           @relation(fields: [administeredById], references: [id])
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
@@ -279,12 +279,12 @@ model MedicationAdministration {
 
 model LabOrder {
   id          String      @id @default(cuid())
-  status      OrderStatus @default(REQUESTED)
-  orderedAt   DateTime    @default(now())
   visitId     String
   visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  orderedById String
-  orderedBy   User        @relation(fields: [orderedById], references: [id])
+  orderedById String?
+  orderedBy   User?       @relation(fields: [orderedById], references: [id])
+  orderedAt   DateTime    @default(now())
+  orderStatus OrderStatus @default(REQUESTED)
   labTests    LabTest[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -295,12 +295,12 @@ model LabOrder {
 
 model LabTest {
   id          String    @id @default(cuid())
+  labOrderId  String
+  labOrder    LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
   testName    String // e.g., "Complete Blood Count", "Lipid Panel"
   result      String? // Can be simple text or JSON for structured results
   notes       String?
   completedAt DateTime?
-  labOrderId  String
-  labOrder    LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
@@ -310,16 +310,16 @@ model LabTest {
 
 model ImagingOrder {
   id          String      @id @default(cuid())
-  studyType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
-  reason      String
-  status      OrderStatus @default(REQUESTED)
-  report      String? // The radiologist's report
-  orderedAt   DateTime    @default(now())
-  completedAt DateTime?
   visitId     String
   visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  orderedById String
-  orderedBy   User        @relation(fields: [orderedById], references: [id])
+  orderedById String?
+  orderedBy   User?       @relation(fields: [orderedById], references: [id])
+  orderType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
+  orderedAt   DateTime    @default(now())
+  completedAt DateTime?
+  orderStatus OrderStatus @default(REQUESTED)
+  reason      String?
+  report      String? // The radiologist's report
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   deletedAt   DateTime?
@@ -331,13 +331,13 @@ model ImagingOrder {
 model Procedure {
   id            String    @id @default(cuid())
   cptCode       String? // Standardized procedure code
-  description   String
-  notes         String?
-  performedAt   DateTime  @default(now())
   visitId       String
   visit         Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  performedById String
-  performedBy   User      @relation(fields: [performedById], references: [id])
+  performedById String?
+  performedBy   User?     @relation(fields: [performedById], references: [id])
+  performedAt   DateTime  @default(now())
+  description   String
+  notes         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
@@ -365,12 +365,12 @@ model Medication {
 // General purpose clinical notes
 model ClinicalNote {
   id        String    @id @default(cuid())
-  noteType  String // e.g., "Progress Note", "Discharge Summary", "Consultation"
-  content   String    @db.Text
   visitId   String
   visit     Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User      @relation(fields: [authorId], references: [id])
+  authorId  String?
+  author    User?     @relation(fields: [authorId], references: [id])
+  noteType  String // e.g., "Progress Note", "Discharge Summary", "Consultation"
+  content   String    @db.Text
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
