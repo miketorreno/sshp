@@ -57,8 +57,9 @@ const PUT = async (
         id: id,
       },
       data: {
-        ...body,
         startDateTime: new Date(body.startDateTime),
+        reason: body.reason,
+        visitType: body.visitType,
       },
     });
 
@@ -79,24 +80,23 @@ const DELETE = async (
   try {
     const id = (await params).id;
 
-    const existingPatient = await prisma.patient.findUnique({
+    const existingVisit = await prisma.visit.findUnique({
       where: { id: id },
     });
 
-    if (!existingPatient) {
+    if (!existingVisit) {
       return NextResponse.json({ error: "Visit not found" }, { status: 404 });
     }
 
-    // Delete patient (this will cascade delete related admissions and appointments)
-    await prisma.patient.delete({
+    await prisma.visit.delete({
       where: { id: id },
     });
 
     return NextResponse.json({ message: "Visit deleted" });
   } catch (error) {
-    console.error("Error deleting patient:", error);
+    console.error("Error deleting visit:", error);
     return NextResponse.json(
-      { error: "Failed to delete patient" },
+      { error: "Failed to delete visit" },
       { status: 500 }
     );
   }

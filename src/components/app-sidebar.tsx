@@ -67,13 +67,13 @@ const data = {
           url: "/patients/admitted",
         },
         {
-          title: "Reports",
+          title: "Report",
           url: "/patients/reports",
         },
       ],
     },
     {
-      title: "Scheduling",
+      title: "Appointments",
       url: "#",
       icon: CalendarDays,
       isActive: true,
@@ -91,7 +91,7 @@ const data = {
           url: "/appointments/calendar",
         },
         {
-          title: "Reports",
+          title: "Report",
           url: "/appointments/reports",
         },
       ],
@@ -123,7 +123,7 @@ const data = {
           url: "/inventory/received",
         },
         {
-          title: "Reports",
+          title: "Report",
           url: "/inventory/reports",
         },
       ],

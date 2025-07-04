@@ -53,7 +53,7 @@ const OutpatientsPage = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold my-2">Today&apos;s Outpatients</h1>
         <Link href="/visits/checkin">
-          <Button>
+          <Button type="button">
             <UserCheck2 />
             Patient Check-in
           </Button>
@@ -87,7 +87,7 @@ const OutpatientsPage = () => {
                 {outpatients.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="text-center py-12">
-                      No outpatients found
+                      No outpatients today
                     </TableCell>
                   </TableRow>
                 ) : (

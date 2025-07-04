@@ -16,59 +16,70 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
+const EditAppointmentPage = ({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<PatientVisit>();
-  const [patientVisit, setPatientVisit] = useState<PatientVisit>();
+  const [formData, setFormData] = useState<PatientAppointment>();
+  const [patientAppointment, setPatientAppointment] =
+    useState<PatientAppointment>();
   const [startDateTimeValue, setStartDateTimeValue] = useState("");
+  const [endDateTimeValue, setEndDateTimeValue] = useState("");
 
-  const fetchVisit = async () => {
+  const fetchAppointment = async () => {
     const { id } = await params;
 
     try {
-      const response = await fetch(`/api/visits/${id}`);
+      const response = await fetch(`/api/appointments/${id}`);
 
       if (response.status === 404) {
-        throw new Error("Visit not found");
+        throw new Error("Appointment not found");
       }
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to fetch visit");
+        throw new Error(error.error || "Failed to fetch appointment");
       }
 
       const data = await response.json();
-      setPatientVisit(data);
+      setPatientAppointment(data);
       setFormData(data);
     } catch (err) {
       console.error("Error: ", err);
-      toast.error("Failed to load visit");
+      toast.error("Failed to load appointment");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchVisit();
+    fetchAppointment();
   }, []);
 
   useEffect(() => {
-    if (patientVisit) {
-      setStartDateTimeValue(formatFetchedDateTime(patientVisit.startDateTime));
+    if (patientAppointment) {
+      setStartDateTimeValue(
+        formatFetchedDateTime(patientAppointment.startDateTime)
+      );
+      setEndDateTimeValue(
+        formatFetchedDateTime(patientAppointment.endDateTime)
+      );
     }
-  }, [patientVisit]);
+  }, [patientAppointment]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
+    setFormData((prev) => ({ ...prev, [id]: value } as PatientAppointment));
   };
 
   const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
+    setFormData((prev) => ({ ...prev, [id]: value } as PatientAppointment));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,24 +87,27 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/visits/${patientVisit?.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await fetch(
+        `/api/appointments/${patientAppointment?.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update visit");
+        throw new Error(data.error || "Failed to update appointment");
       }
 
-      toast.success("Visit updated");
-      router.push(`/visits/${data.id}`);
+      toast.success("Appointment updated");
+      router.push(`/appointments/all`);
     } catch (error) {
       console.error("Error: ", error);
-      toast.error("Failed to update visit");
+      toast.error("Failed to update appointment");
     } finally {
       setIsSubmitting(false);
     }
@@ -102,14 +116,14 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Visit Info</h1>
+        <h1 className="text-2xl font-bold my-2">Appointment Info</h1>
       </div>
 
       <Card className="mb-8">
         <CardContent>
           {loading ? (
             <div className="flex justify-center items-center h-40">
-              <p>Loading visit...</p>
+              <p>Loading appointment...</p>
             </div>
           ) : (
             <form className="space-y-12" onSubmit={handleSubmit}>
@@ -149,7 +163,7 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="grid gap-3">
                   <Label htmlFor="startDateTime">
-                    Check In<span className="text-red-500">*</span>
+                    Start Date<span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="startDateTime"
@@ -161,26 +175,62 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="visitType">
+                  <Label htmlFor="endDateTime">
+                    End Date<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="endDateTime"
+                    type="datetime-local"
+                    required
+                    value={endDateTimeValue}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="grid gap-3">
+                  <Label htmlFor="appointmentType">
                     Type<span className="text-red-500">*</span>
                   </Label>
                   <Select
                     required
-                    value={patientVisit?.visitType}
+                    value={patientAppointment?.appointmentType}
                     onValueChange={(value) =>
-                      handleSelectChange("visitType", value)
+                      handleSelectChange("appointmentType", value)
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="ADMISSION">Admission</SelectItem>
                       <SelectItem value="CLINIC">Clinic</SelectItem>
                       <SelectItem value="EMERGENCY">Emergency</SelectItem>
                       <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
                       <SelectItem value="IMAGING">Imaging</SelectItem>
                       <SelectItem value="LAB">Lab</SelectItem>
                       <SelectItem value="PHARMACY">Pharmacy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="appointmentStatus">Status</Label>
+                  <Select
+                    value={patientAppointment?.appointmentStatus}
+                    onValueChange={(value) =>
+                      handleSelectChange("appointmentStatus", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ATTENDED">Attended</SelectItem>
+                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                      <SelectItem value="MISSED">Missed</SelectItem>
+                      <SelectItem value="SCHEDULED">Scheduled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -203,7 +253,7 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 className="mt-4 mr-2"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Updating..." : "Update Visit"}
+                {isSubmitting ? "Updating..." : "Update Appointment"}
               </Button>
               <Button type="button" onClick={() => router.back()}>
                 Back
@@ -216,4 +266,4 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   );
 };
 
-export default EditVisitPage;
+export default EditAppointmentPage;

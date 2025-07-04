@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GET = async () => {
   try {
-    const patients = await prisma.visit.findMany({
+    const appointments = await prisma.appointment.findMany({
       orderBy: {
         createdAt: "desc",
       },
@@ -12,11 +12,11 @@ const GET = async () => {
       },
     });
 
-    return NextResponse.json(patients);
+    return NextResponse.json(appointments);
   } catch (error) {
-    console.error("Error fetching patients: ", error);
+    console.error("Error fetching appointments: ", error);
     return NextResponse.json(
-      { error: "Failed to fetch patients" },
+      { error: "Failed to fetch appointments" },
       { status: 500 }
     );
   }
@@ -27,10 +27,12 @@ const POST = async (request: NextRequest) => {
 
   try {
     const body = await request.json();
-    const visit = await prisma.visit.create({
+    const appointment = await prisma.appointment.create({
       data: {
         startDateTime: new Date(body.startDateTime),
-        visitType: body.visitType,
+        endDateTime: new Date(body.endDateTime),
+        appointmentType: body.appointmentType,
+        appointmentStatus: body.appointmentStatus,
         reason: body.reason,
         patient: {
           connect: {
@@ -40,7 +42,7 @@ const POST = async (request: NextRequest) => {
       },
     });
 
-    return NextResponse.json(visit, { status: 201 });
+    return NextResponse.json(appointment, { status: 201 });
   } catch (error) {
     console.error("Error creating outpatient:", error);
     return NextResponse.json(
