@@ -21,6 +21,7 @@ enum Role {
   PATIENT
   PHARMACIST
   RECEPTIONIST
+  SUPERUSER
   USER
 }
 
@@ -104,30 +105,29 @@ model User {
 }
 
 model Patient {
-  id            String        @id @default(cuid())
-  patientCode   String        @unique @default(cuid())
-  firstName     String
-  middleName    String
-  lastName      String
-  dateOfBirth   DateTime
-  gender        String
-  bloodGroup    String?
-  placeOfBirth  String?
-  occupation    String?
-  phone         String?
-  email         String        @unique
-  address       String?
-  country       String?
-  guardian      String?
-  referredBy    String?
-  referredDate  DateTime?
-  patientStatus String?
-  patientType   PatientType   @default(OUTPATIENT)
-  visits        Visit[]
-  appointments  Appointment[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id           String        @id @default(cuid())
+  patientCode  String        @unique @default(cuid())
+  firstName    String
+  middleName   String
+  lastName     String
+  dateOfBirth  DateTime
+  gender       String
+  bloodGroup   String?
+  placeOfBirth String?
+  occupation   String?
+  phone        String?
+  email        String        @unique
+  address      String?
+  country      String?
+  guardian     String?
+  referredBy   String?
+  referredDate DateTime?
+  patientType  PatientType   @default(OUTPATIENT)
+  visits       Visit[]
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 
   @@index([patientCode, email])
 }
@@ -314,10 +314,10 @@ model ImagingOrder {
   visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
   orderedById String?
   orderedBy   User?       @relation(fields: [orderedById], references: [id])
-  orderType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
   orderedAt   DateTime    @default(now())
   completedAt DateTime?
   orderStatus OrderStatus @default(REQUESTED)
+  orderType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
   reason      String?
   report      String? // The radiologist's report
   createdAt   DateTime    @default(now())

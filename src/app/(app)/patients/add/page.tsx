@@ -31,11 +31,9 @@ const AddPatientPage = () => {
     email: "",
     address: "",
     country: "",
-    patientStatus: "",
     guardian: "",
     referredBy: "",
     referredDate: "",
-    patientType: "",
   });
 
   const handleChange = (
@@ -260,17 +258,6 @@ const AddPatientPage = () => {
             <hr />
 
             <div className="grid md:grid-cols-2 gap-10">
-              <div className="grid gap-3">
-                <Label htmlFor="status">Patient Status</Label>
-                <Input
-                  id="status"
-                  type="text"
-                  placeholder=""
-                  value={formData.patientStatus}
-                  onChange={handleChange}
-                />
-              </div>
-
               <div className="grid gap-3">
                 <Label htmlFor="guardian">Guardian</Label>
                 <Input

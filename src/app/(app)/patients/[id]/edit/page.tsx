@@ -302,7 +302,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
               <hr />
 
               <div className="grid md:grid-cols-2 gap-10">
-                <div className="grid gap-3">
+                {/* <div className="grid gap-3">
                   <Label htmlFor="status">Patient Status</Label>
                   <Input
                     id="status"
@@ -311,7 +311,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     value={formData?.patientStatus ?? ""}
                     onChange={handleChange}
                   />
-                </div>
+                </div> */}
 
                 <div className="grid gap-3">
                   <Label htmlFor="guardian">Guardian</Label>

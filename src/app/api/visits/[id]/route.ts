@@ -15,6 +15,7 @@ const GET = async (
       include: {
         patient: true,
         provider: true,
+        imagingOrders: true,
       },
     });
 

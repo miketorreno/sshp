@@ -3,6 +3,7 @@ import {
   AudioWaveform,
   CalendarDays,
   Command,
+  Fullscreen,
   GalleryVerticalEnd,
   Store,
   User,
@@ -93,6 +94,22 @@ const data = {
         {
           title: "Report",
           url: "/appointments/reports",
+        },
+      ],
+    },
+    {
+      title: "Imaging",
+      url: "/imaging",
+      icon: Fullscreen,
+      isActive: true,
+      items: [
+        {
+          title: "Requests",
+          url: "/imaging/requests",
+        },
+        {
+          title: "Completed",
+          url: "/imaging/completed",
         },
       ],
     },

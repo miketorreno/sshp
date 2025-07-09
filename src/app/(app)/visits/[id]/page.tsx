@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTime } from "@/lib/utils";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -90,6 +91,25 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
         toast.error("Failed to checkout patient");
       } finally {
         setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to delete this order?")) {
+      try {
+        const response = await fetch(`/api/orders/imaging/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete order");
+        }
+
+        toast.success("Imaging order deleted");
+      } catch (error) {
+        console.error("Error deleting order:", error);
+        toast.error("Failed to delete order");
       }
     }
   };
@@ -215,13 +235,21 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Lab</Link>
+                    <Link href={`/visits/${patientVisit?.id}/request/lab`}>
+                      Lab
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Imaging</Link>
+                    <Link href={`/visits/${patientVisit?.id}/request/imaging`}>
+                      Imaging
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Medication</Link>
+                    <Link
+                      href={`/visits/${patientVisit?.id}/request/medication`}
+                    >
+                      Medication
+                    </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -233,14 +261,59 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     <TableHead>Order Name</TableHead>
                     <TableHead>Order Type</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Date Processed</TableHead>
+                    <TableHead>Processed At</TableHead>
                     <TableHead>Result</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead>Requested By</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody></TableBody>
+                <TableBody>
+                  {patientVisit?.imagingOrders &&
+                    patientVisit?.imagingOrders.map((imagingOrder) => (
+                      <TableRow key={imagingOrder.id}>
+                        <TableCell>
+                          {formatDateTime(imagingOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>{imagingOrder.orderType}</TableCell>
+                        <TableCell>Imaging</TableCell>
+                        <TableCell>{imagingOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {imagingOrder.completedAt &&
+                            formatDateTime(imagingOrder.completedAt)}
+                        </TableCell>
+                        <TableCell>{imagingOrder.report}</TableCell>
+                        <TableCell>{imagingOrder.reason}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/orders/imaging/${imagingOrder.id}/edit`
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => handleDelete(imagingOrder.id)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
               </Table>
 
               {/* <div className="mt-20 flex flex-row-reverse gap-2">
