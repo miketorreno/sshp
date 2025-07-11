@@ -18,6 +18,10 @@ const GET = async (
         imagingOrders: true,
         labOrders: true,
         medOrders: true,
+        vitals: true,
+        clinicalNotes: true,
+        diagnoses: true,
+        procedures: true,
       },
     });
 
@@ -26,10 +30,10 @@ const GET = async (
     }
 
     return NextResponse.json(visit);
-  } catch (error) {
-    console.error("Error fetching visit: ", error);
+  } catch (err) {
+    console.error("Error while fetching visit: ", err);
     return NextResponse.json(
-      { error: "Failed to fetch visit" },
+      { error: "Error while fetching visit" },
       { status: 500 }
     );
   }
@@ -67,10 +71,10 @@ const PUT = async (
     });
 
     return NextResponse.json(visit);
-  } catch (error) {
-    console.error("Error updating visit:", error);
+  } catch (err) {
+    console.error("Error while updating visit:", err);
     return NextResponse.json(
-      { error: "Failed to update visit" },
+      { error: "Error while updating visit" },
       { status: 500 }
     );
   }
@@ -96,10 +100,10 @@ const DELETE = async (
     });
 
     return NextResponse.json({ message: "Visit deleted" });
-  } catch (error) {
-    console.error("Error deleting visit:", error);
+  } catch (err) {
+    console.error("Error while deleting visit:", err);
     return NextResponse.json(
-      { error: "Failed to delete visit" },
+      { error: "Error while deleting visit" },
       { status: 500 }
     );
   }

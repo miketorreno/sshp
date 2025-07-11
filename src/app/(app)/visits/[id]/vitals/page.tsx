@@ -7,13 +7,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
-const AddMedicationRequest = ({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) => {
+const AddVitalsPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,31 +57,28 @@ const AddMedicationRequest = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(
-        `/api/visits/${patientVisit?.id}/request/medication`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            patient: { id: patientVisit?.patient.id },
-            visit: { id: patientVisit?.id },
-          }),
-        }
-      );
+      const res = await fetch(`/api/visits/${patientVisit?.id}/vitals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          patient: { id: patientVisit?.patient.id },
+          visit: { id: patientVisit?.id },
+        }),
+      });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to create medication request");
+        throw new Error(data.error || "Error while adding vitals");
       }
 
-      toast.success("Medication request created");
+      toast.success("Vitals added");
       router.push(`/visits/${patientVisit?.id}`);
     } catch (err) {
       console.error("Error: ", err);
-      toast.error("Failed to create medication request");
+      toast.error("Error while adding vitals");
     } finally {
       setIsSubmitting(false);
     }
@@ -95,7 +87,7 @@ const AddMedicationRequest = ({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Medication Request</h1>
+        <h1 className="text-2xl font-bold my-2">Add Vitals</h1>
       </div>
 
       <Card className="mb-8">
@@ -139,13 +131,34 @@ const AddMedicationRequest = ({
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid md:grid-cols-4 gap-10">
                 <div className="grid gap-3">
-                  <Label htmlFor="medication">
-                    Medication<span className="text-red-500">*</span>
+                  <Label htmlFor="height">Height (kg)</Label>
+                  <Input
+                    type="number"
+                    id="height"
+                    placeholder=""
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="weight">Weight (cm)</Label>
+                  <Input
+                    type="number"
+                    id="weight"
+                    placeholder=""
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="systolicBP">
+                    Systolic<span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="medication"
+                    type="number"
+                    id="systolicBP"
                     placeholder=""
                     onChange={handleChange}
                     required
@@ -153,11 +166,12 @@ const AddMedicationRequest = ({
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="prescription">
-                    Prescription <span className="text-red-500">*</span>
+                  <Label htmlFor="diastolicBP">
+                    Diastolic<span className="text-red-500">*</span>
                   </Label>
-                  <Textarea
-                    id="prescription"
+                  <Input
+                    type="number"
+                    id="diastolicBP"
                     placeholder=""
                     onChange={handleChange}
                     required
@@ -167,36 +181,80 @@ const AddMedicationRequest = ({
 
               <div className="grid md:grid-cols-3 gap-10">
                 <div className="grid gap-3">
-                  <Label htmlFor="dosage">
-                    Dosage<span className="text-red-500">*</span>
+                  <Label htmlFor="temperatureCelsius">
+                    Temperature (°C)<span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="dosage"
-                    placeholder="500mg"
+                    type="number"
+                    id="temperatureCelsius"
+                    placeholder=""
                     onChange={handleChange}
                     required
                   />
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="frequency">
-                    Frequency<span className="text-red-500">*</span>
+                  <Label htmlFor="heartRate">
+                    Heart Rate<span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="frequency"
-                    placeholder="Twice a day"
+                    type="number"
+                    id="heartRate"
+                    placeholder=""
                     onChange={handleChange}
                     required
                   />
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="route">
-                    Route<span className="text-red-500">*</span>
+                  <Label htmlFor="respiratoryRate">
+                    Respiratory Rate<span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="route"
-                    placeholder="Oral"
+                    type="number"
+                    id="respiratoryRate"
+                    placeholder=""
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-10">
+                <div className="grid gap-3">
+                  <Label htmlFor="oxygenSaturation">
+                    Oxygen Saturation<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    id="oxygenSaturation"
+                    placeholder=""
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="glucose">
+                    Glucose<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    id="glucose"
+                    placeholder=""
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="cholesterol">
+                    Cholesterol<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    id="cholesterol"
+                    placeholder=""
                     onChange={handleChange}
                     required
                   />
@@ -208,7 +266,7 @@ const AddMedicationRequest = ({
                 className="mt-4 mr-2"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Adding..." : "Add Request"}
+                {isSubmitting ? "Adding..." : "Add Vitals"}
               </Button>
               <Button type="button" onClick={() => router.back()}>
                 Back
@@ -221,4 +279,4 @@ const AddMedicationRequest = ({
   );
 };
 
-export default AddMedicationRequest;
+export default AddVitalsPage;
