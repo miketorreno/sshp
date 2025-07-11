@@ -119,7 +119,7 @@ const AllPatientsPage = () => {
                       <TableCell>{patient.gender}</TableCell>
                       <TableCell>{patient.bloodGroup}</TableCell>
                       <TableCell className="capitalize">
-                        {patient.patientStatus}
+                        patientStatus ??
                       </TableCell>
                       <TableCell>{patient.phone || "-"}</TableCell>
                       <TableCell>

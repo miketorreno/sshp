@@ -29,8 +29,7 @@ interface Patient {
   guardian: string | null;
   referredBy: string | null;
   referredDate: Datetime | null;
-  patientStatus: string | null;
-  patientType: string;
+  patientType: string | null;
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;
@@ -78,7 +77,6 @@ interface PatientVisit {
     guardian: string | null;
     referredBy: string | null;
     referredDate: Datetime | null;
-    patientStatus: string | null;
     patientType: string | null;
     createdAt: Datetime;
     updatedAt: Datetime;
@@ -97,6 +95,9 @@ interface PatientVisit {
     updatedAt: Datetime;
     deletedAt: Datetime | null;
   };
+  imagingOrders: ImagingOrder[];
+  labOrders: LabOrder[];
+  medOrders: MedicationOrder[];
 }
 
 interface Appointment {
@@ -145,7 +146,6 @@ interface PatientAppointment {
     guardian: string | null;
     referredBy: string | null;
     referredDate: Datetime | null;
-    patientStatus: string | null;
     patientType: string | null;
     createdAt: Datetime;
     updatedAt: Datetime;
@@ -164,4 +164,51 @@ interface PatientAppointment {
     updatedAt: Datetime;
     deletedAt: Datetime | null;
   };
+}
+
+interface ImagingOrder {
+  id: string;
+  visitId: string;
+  orderedById: string | null;
+  orderedAt: Datetime;
+  completedAt: Datetime | null;
+  orderStatus: string;
+  imagingType: string;
+  notes: string | null;
+  result: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
+}
+
+interface LabOrder {
+  id: string;
+  visitId: string;
+  orderedById: string | null;
+  orderedAt: Datetime;
+  completedAt: Datetime | null;
+  orderStatus: string;
+  labType: string;
+  notes: string | null;
+  result: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
+}
+
+interface MedicationOrder {
+  id: string;
+  visitId: string;
+  orderedById: string | null;
+  medicationId: string | null;
+  orderedAt: Datetime;
+  completedAt: Datetime | null;
+  orderStatus: string;
+  dosage: string;
+  frequency: string;
+  route: string;
+  notes: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
 }

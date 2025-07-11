@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTime } from "@/lib/utils";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -94,6 +95,27 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     }
   };
 
+  const handleDelete = async (id: string, type: string) => {
+    if (confirm("Are you sure you want to delete this order?")) {
+      try {
+        const response = await fetch(`/api/orders/${type}/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete order");
+        }
+
+        toast.success(
+          `${type.charAt(0).toUpperCase() + type.slice(1)} order deleted`
+        );
+      } catch (error) {
+        console.error("Error deleting order:", error);
+        toast.error("Failed to delete order");
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -127,11 +149,13 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </h4>
                     </Link>
                   </div>
-                  <Link href={`/visits/${patientVisit?.id}/edit`}>
-                    <Button type="button" size={"sm"}>
-                      Edit Visit
-                    </Button>
-                  </Link>
+                  {!patientVisit?.endDateTime && (
+                    <Link href={`/visits/${patientVisit?.id}/edit`}>
+                      <Button type="button" size={"sm"}>
+                        Edit Visit
+                      </Button>
+                    </Link>
+                  )}
                 </div>
 
                 <div className="col-span-2">
@@ -208,20 +232,30 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
             </TabsList>
             <TabsContent value="orders">
               <DropdownMenu>
-                <DropdownMenuTrigger asChild className="mb-4">
-                  <Button size={"sm"}>
-                    <Plus /> Add Order
-                  </Button>
-                </DropdownMenuTrigger>
+                {!patientVisit?.endDateTime && (
+                  <DropdownMenuTrigger asChild className="mb-4">
+                    <Button size={"sm"}>
+                      <Plus /> Add Order
+                    </Button>
+                  </DropdownMenuTrigger>
+                )}
                 <DropdownMenuContent>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Lab</Link>
+                    <Link href={`/visits/${patientVisit?.id}/request/lab`}>
+                      Lab
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Imaging</Link>
+                    <Link href={`/visits/${patientVisit?.id}/request/imaging`}>
+                      Imaging
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Link href="/patients/add">Medication</Link>
+                    <Link
+                      href={`/visits/${patientVisit?.id}/request/medication`}
+                    >
+                      Medication
+                    </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -233,14 +267,149 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     <TableHead>Order Name</TableHead>
                     <TableHead>Order Type</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Date Processed</TableHead>
+                    <TableHead>Processed At</TableHead>
                     <TableHead>Result</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead>Requested By</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody></TableBody>
+                <TableBody>
+                  {patientVisit?.labOrders &&
+                    patientVisit?.labOrders.map((labOrder) => (
+                      <TableRow key={labOrder.id}>
+                        <TableCell>
+                          {formatDateTime(labOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>{labOrder.labType}</TableCell>
+                        <TableCell>Lab</TableCell>
+                        <TableCell>{labOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {labOrder.completedAt &&
+                            formatDateTime(labOrder.completedAt)}
+                        </TableCell>
+                        <TableCell>{labOrder.result}</TableCell>
+                        <TableCell>{labOrder.notes}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(`/orders/lab/${labOrder.id}/edit`)
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => handleDelete(labOrder.id, "lab")}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {patientVisit?.imagingOrders &&
+                    patientVisit?.imagingOrders.map((imagingOrder) => (
+                      <TableRow key={imagingOrder.id}>
+                        <TableCell>
+                          {formatDateTime(imagingOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>{imagingOrder.imagingType}</TableCell>
+                        <TableCell>Imaging</TableCell>
+                        <TableCell>{imagingOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {imagingOrder.completedAt &&
+                            formatDateTime(imagingOrder.completedAt)}
+                        </TableCell>
+                        <TableCell>{imagingOrder.result}</TableCell>
+                        <TableCell>{imagingOrder.notes}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/orders/imaging/${imagingOrder.id}/edit`
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() =>
+                                  handleDelete(imagingOrder.id, "imaging")
+                                }
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {patientVisit?.medOrders &&
+                    patientVisit?.medOrders.map((medOrder) => (
+                      <TableRow key={medOrder.id}>
+                        <TableCell>
+                          {formatDateTime(medOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>Medicine</TableCell>
+                        <TableCell>Medication</TableCell>
+                        <TableCell>{medOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {medOrder.completedAt &&
+                            formatDateTime(medOrder.completedAt)}
+                        </TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>{medOrder.notes}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/orders/imaging/${medOrder.id}/edit`
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() =>
+                                  handleDelete(medOrder.id, "medication")
+                                }
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
               </Table>
 
               {/* <div className="mt-20 flex flex-row-reverse gap-2">

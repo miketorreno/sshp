@@ -21,6 +21,7 @@ enum Role {
   PATIENT
   PHARMACIST
   RECEPTIONIST
+  SUPERUSER
   USER
 }
 
@@ -104,30 +105,29 @@ model User {
 }
 
 model Patient {
-  id            String        @id @default(cuid())
-  patientCode   String        @unique @default(cuid())
-  firstName     String
-  middleName    String
-  lastName      String
-  dateOfBirth   DateTime
-  gender        String
-  bloodGroup    String?
-  placeOfBirth  String?
-  occupation    String?
-  phone         String?
-  email         String        @unique
-  address       String?
-  country       String?
-  guardian      String?
-  referredBy    String?
-  referredDate  DateTime?
-  patientStatus String?
-  patientType   PatientType   @default(OUTPATIENT)
-  visits        Visit[]
-  appointments  Appointment[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id           String        @id @default(cuid())
+  patientCode  String        @unique @default(cuid())
+  firstName    String
+  middleName   String
+  lastName     String
+  dateOfBirth  DateTime
+  gender       String
+  bloodGroup   String?
+  placeOfBirth String?
+  occupation   String?
+  phone        String?
+  email        String        @unique
+  address      String?
+  country      String?
+  guardian     String?
+  referredBy   String?
+  referredDate DateTime?
+  patientType  PatientType   @default(OUTPATIENT)
+  visits       Visit[]
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 
   @@index([patientCode, email])
 }
@@ -243,18 +243,19 @@ model Diagnosis {
 
 model MedicationOrder {
   id              String                     @id @default(cuid())
+  visitId         String
+  visit           Visit                      @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  orderedById     String?
+  orderedBy       User?                      @relation(fields: [orderedById], references: [id])
+  medicationId    String?
+  medication      Medication?                @relation(fields: [medicationId], references: [id])
+  orderedAt       DateTime                   @default(now())
+  completedAt     DateTime?
+  orderStatus     OrderStatus                @default(REQUESTED)
   dosage          String // e.g., "500mg"
   frequency       String // e.g., "Twice a day"
   route           String // e.g., "Oral", "IV"
-  orderStatus     OrderStatus                @default(REQUESTED)
   notes           String?
-  orderedAt       DateTime                   @default(now())
-  visitId         String
-  visit           Visit                      @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  medicationId    String
-  medication      Medication                 @relation(fields: [medicationId], references: [id])
-  orderedById     String?
-  orderedBy       User?                      @relation(fields: [orderedById], references: [id])
   administrations MedicationAdministration[]
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
@@ -284,7 +285,11 @@ model LabOrder {
   orderedById String?
   orderedBy   User?       @relation(fields: [orderedById], references: [id])
   orderedAt   DateTime    @default(now())
+  completedAt DateTime?
   orderStatus OrderStatus @default(REQUESTED)
+  labType     String // e.g., "Blood Test", "Urine Test"
+  notes       String?
+  result      String? // Technician's report
   labTests    LabTest[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -314,12 +319,12 @@ model ImagingOrder {
   visit       Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
   orderedById String?
   orderedBy   User?       @relation(fields: [orderedById], references: [id])
-  orderType   String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
   orderedAt   DateTime    @default(now())
   completedAt DateTime?
   orderStatus OrderStatus @default(REQUESTED)
-  reason      String?
-  report      String? // The radiologist's report
+  imagingType String // e.g., "Chest X-Ray (2 views)", "CT Scan of Abdomen"
+  notes       String?
+  result      String? // The radiologist's report
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   deletedAt   DateTime?

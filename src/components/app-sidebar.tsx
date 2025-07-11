@@ -3,7 +3,10 @@ import {
   AudioWaveform,
   CalendarDays,
   Command,
+  Fullscreen,
   GalleryVerticalEnd,
+  Microscope,
+  Pill,
   Store,
   User,
 } from "lucide-react";
@@ -48,7 +51,7 @@ const data = {
       title: "Patients",
       url: "/patients",
       icon: User,
-      isActive: true,
+      isActive: false,
       items: [
         {
           title: "Add Patient",
@@ -76,7 +79,7 @@ const data = {
       title: "Appointments",
       url: "#",
       icon: CalendarDays,
-      isActive: true,
+      isActive: false,
       items: [
         {
           title: "Add Appointment",
@@ -97,10 +100,58 @@ const data = {
       ],
     },
     {
+      title: "Laboratory",
+      url: "/lab",
+      icon: Microscope,
+      // isActive: false,
+      // items: [
+      //   {
+      //     title: "Requests",
+      //     url: "/lab/requests",
+      //   },
+      //   {
+      //     title: "Completed",
+      //     url: "/lab/completed",
+      //   },
+      // ],
+    },
+    {
+      title: "Medication",
+      url: "/medication",
+      icon: Pill,
+      // isActive: false,
+      // items: [
+      //   {
+      //     title: "Requests",
+      //     url: "/medication/requests",
+      //   },
+      //   {
+      //     title: "Completed",
+      //     url: "/medication/completed",
+      //   },
+      // ],
+    },
+    {
+      title: "Imaging",
+      url: "/imaging",
+      icon: Fullscreen,
+      // isActive: false,
+      // items: [
+      //   {
+      //     title: "Requests",
+      //     url: "/imaging/requests",
+      //   },
+      //   {
+      //     title: "Completed",
+      //     url: "/imaging/completed",
+      //   },
+      // ],
+    },
+    {
       title: "Inventory",
       url: "#",
       icon: Store,
-      isActive: true,
+      isActive: false,
       items: [
         {
           title: "Add Item",
@@ -136,7 +187,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         {/* <TeamSwitcher teams={data.teams} /> */}
-        {/* <div className="items-center gap-2">SS</div> */}
+        {/* <div className="items-center gap-2">SSHP</div> */}
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
