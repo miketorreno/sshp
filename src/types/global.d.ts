@@ -96,6 +96,8 @@ interface PatientVisit {
     deletedAt: Datetime | null;
   };
   imagingOrders: ImagingOrder[];
+  labOrders: LabOrder[];
+  medOrders: MedicationOrder[];
 }
 
 interface Appointment {
@@ -171,9 +173,41 @@ interface ImagingOrder {
   orderedAt: Datetime;
   completedAt: Datetime | null;
   orderStatus: string;
-  orderType: string;
-  reason: string | null;
-  report: string | null;
+  imagingType: string;
+  notes: string | null;
+  result: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
+}
+
+interface LabOrder {
+  id: string;
+  visitId: string;
+  orderedById: string | null;
+  orderedAt: Datetime;
+  completedAt: Datetime | null;
+  orderStatus: string;
+  labType: string;
+  notes: string | null;
+  result: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
+}
+
+interface MedicationOrder {
+  id: string;
+  visitId: string;
+  orderedById: string | null;
+  medicationId: string | null;
+  orderedAt: Datetime;
+  completedAt: Datetime | null;
+  orderStatus: string;
+  dosage: string;
+  frequency: string;
+  route: string;
+  notes: string | null;
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;

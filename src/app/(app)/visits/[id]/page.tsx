@@ -95,10 +95,10 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, type: string) => {
     if (confirm("Are you sure you want to delete this order?")) {
       try {
-        const response = await fetch(`/api/orders/imaging/${id}`, {
+        const response = await fetch(`/api/orders/${type}/${id}`, {
           method: "DELETE",
         });
 
@@ -106,7 +106,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
           throw new Error("Failed to delete order");
         }
 
-        toast.success("Imaging order deleted");
+        toast.success(
+          `${type.charAt(0).toUpperCase() + type.slice(1)} order deleted`
+        );
       } catch (error) {
         console.error("Error deleting order:", error);
         toast.error("Failed to delete order");
@@ -147,11 +149,13 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </h4>
                     </Link>
                   </div>
-                  <Link href={`/visits/${patientVisit?.id}/edit`}>
-                    <Button type="button" size={"sm"}>
-                      Edit Visit
-                    </Button>
-                  </Link>
+                  {!patientVisit?.endDateTime && (
+                    <Link href={`/visits/${patientVisit?.id}/edit`}>
+                      <Button type="button" size={"sm"}>
+                        Edit Visit
+                      </Button>
+                    </Link>
+                  )}
                 </div>
 
                 <div className="col-span-2">
@@ -228,11 +232,13 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
             </TabsList>
             <TabsContent value="orders">
               <DropdownMenu>
-                <DropdownMenuTrigger asChild className="mb-4">
-                  <Button size={"sm"}>
-                    <Plus /> Add Order
-                  </Button>
-                </DropdownMenuTrigger>
+                {!patientVisit?.endDateTime && (
+                  <DropdownMenuTrigger asChild className="mb-4">
+                    <Button size={"sm"}>
+                      <Plus /> Add Order
+                    </Button>
+                  </DropdownMenuTrigger>
+                )}
                 <DropdownMenuContent>
                   <DropdownMenuItem>
                     <Link href={`/visits/${patientVisit?.id}/request/lab`}>
@@ -269,21 +275,63 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {patientVisit?.labOrders &&
+                    patientVisit?.labOrders.map((labOrder) => (
+                      <TableRow key={labOrder.id}>
+                        <TableCell>
+                          {formatDateTime(labOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>{labOrder.labType}</TableCell>
+                        <TableCell>Lab</TableCell>
+                        <TableCell>{labOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {labOrder.completedAt &&
+                            formatDateTime(labOrder.completedAt)}
+                        </TableCell>
+                        <TableCell>{labOrder.result}</TableCell>
+                        <TableCell>{labOrder.notes}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(`/orders/lab/${labOrder.id}/edit`)
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => handleDelete(labOrder.id, "lab")}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   {patientVisit?.imagingOrders &&
                     patientVisit?.imagingOrders.map((imagingOrder) => (
                       <TableRow key={imagingOrder.id}>
                         <TableCell>
                           {formatDateTime(imagingOrder.orderedAt)}
                         </TableCell>
-                        <TableCell>{imagingOrder.orderType}</TableCell>
+                        <TableCell>{imagingOrder.imagingType}</TableCell>
                         <TableCell>Imaging</TableCell>
                         <TableCell>{imagingOrder.orderStatus}</TableCell>
                         <TableCell>
                           {imagingOrder.completedAt &&
                             formatDateTime(imagingOrder.completedAt)}
                         </TableCell>
-                        <TableCell>{imagingOrder.report}</TableCell>
-                        <TableCell>{imagingOrder.reason}</TableCell>
+                        <TableCell>{imagingOrder.result}</TableCell>
+                        <TableCell>{imagingOrder.notes}</TableCell>
                         <TableCell></TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -304,7 +352,55 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-red-600"
-                                onClick={() => handleDelete(imagingOrder.id)}
+                                onClick={() =>
+                                  handleDelete(imagingOrder.id, "imaging")
+                                }
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {patientVisit?.medOrders &&
+                    patientVisit?.medOrders.map((medOrder) => (
+                      <TableRow key={medOrder.id}>
+                        <TableCell>
+                          {formatDateTime(medOrder.orderedAt)}
+                        </TableCell>
+                        <TableCell>Medicine</TableCell>
+                        <TableCell>Medication</TableCell>
+                        <TableCell>{medOrder.orderStatus}</TableCell>
+                        <TableCell>
+                          {medOrder.completedAt &&
+                            formatDateTime(medOrder.completedAt)}
+                        </TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>{medOrder.notes}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/orders/imaging/${medOrder.id}/edit`
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() =>
+                                  handleDelete(medOrder.id, "medication")
+                                }
                               >
                                 Delete
                               </DropdownMenuItem>

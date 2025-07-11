@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
+const AddLabRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +59,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
     try {
       const response = await fetch(
-        `/api/visits/${patientVisit?.id}/request/imaging`,
+        `/api/visits/${patientVisit?.id}/request/lab`,
         {
           method: "POST",
           headers: {
@@ -75,14 +75,14 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create imaging request");
+        throw new Error(data.error || "Failed to create lab request");
       }
 
-      toast.success("Imaging request created");
+      toast.success("Lab request created");
       router.push(`/visits/${patientVisit?.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to create imaging request");
+    } catch (err) {
+      console.error("Error: ", err);
+      toast.error("Failed to create lab request");
     } finally {
       setIsSubmitting(false);
     }
@@ -91,7 +91,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Imaging Request</h1>
+        <h1 className="text-2xl font-bold my-2">Lab Request</h1>
       </div>
 
       <Card className="mb-8">
@@ -135,18 +135,14 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="grid gap-3">
-                  <Label htmlFor="imagingType">
-                    Imaging Type<span className="text-red-500">*</span>
+                  <Label htmlFor="labType">
+                    Lab Type<span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    id="imagingType"
-                    placeholder=""
-                    onChange={handleChange}
-                  />
+                  <Input id="labType" placeholder="" onChange={handleChange} />
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="technician">Radiologist</Label>
+                  <Label htmlFor="technician">Technician</Label>
                   <Input
                     id="technician"
                     placeholder=""
@@ -180,4 +176,4 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   );
 };
 
-export default AddImagingRequest;
+export default AddLabRequest;

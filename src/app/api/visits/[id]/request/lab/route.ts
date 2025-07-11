@@ -6,9 +6,9 @@ const POST = async (request: NextRequest) => {
 
   try {
     const body = await request.json();
-    const imagingOrder = await prisma.imagingOrder.create({
+    const labOrder = await prisma.labOrder.create({
       data: {
-        imagingType: body.imagingType,
+        labType: body.labType,
         notes: body.notes,
         visit: {
           connect: {
@@ -18,13 +18,13 @@ const POST = async (request: NextRequest) => {
       },
     });
 
-    return NextResponse.json(imagingOrder, { status: 201 });
-  } catch (error) {
-    console.error("Error creating imaging request:", error);
+    return NextResponse.json(labOrder, { status: 201 });
+  } catch (err) {
+    console.error("Error creating lab request:", err);
     return NextResponse.json(
       {
-        error: "Failed to create imaging request",
-        details: error instanceof Error ? error.message : String(error),
+        error: "Failed to create lab request",
+        details: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
     );

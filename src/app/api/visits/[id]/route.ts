@@ -16,6 +16,8 @@ const GET = async (
         patient: true,
         provider: true,
         imagingOrders: true,
+        labOrders: true,
+        medOrders: true,
       },
     });
 

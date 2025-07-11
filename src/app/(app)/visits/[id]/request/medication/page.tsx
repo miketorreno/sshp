@@ -9,7 +9,11 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
+const AddMedicationRequest = ({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +63,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
     try {
       const response = await fetch(
-        `/api/visits/${patientVisit?.id}/request/imaging`,
+        `/api/visits/${patientVisit?.id}/request/medication`,
         {
           method: "POST",
           headers: {
@@ -75,14 +79,14 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create imaging request");
+        throw new Error(data.error || "Failed to create medication request");
       }
 
-      toast.success("Imaging request created");
+      toast.success("Medication request created");
       router.push(`/visits/${patientVisit?.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to create imaging request");
+    } catch (err) {
+      console.error("Error: ", err);
+      toast.error("Failed to create medication request");
     } finally {
       setIsSubmitting(false);
     }
@@ -91,7 +95,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Imaging Request</h1>
+        <h1 className="text-2xl font-bold my-2">Medication Request</h1>
       </div>
 
       <Card className="mb-8">
@@ -120,7 +124,9 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="visit">Visit</Label>
+                  <Label htmlFor="visit">
+                    Visit<span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="visit"
                     placeholder=""
@@ -135,30 +141,65 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="grid gap-3">
-                  <Label htmlFor="imagingType">
-                    Imaging Type<span className="text-red-500">*</span>
+                  <Label htmlFor="medication">
+                    Medication<span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="imagingType"
+                    id="medication"
                     placeholder=""
                     onChange={handleChange}
+                    required
                   />
                 </div>
 
                 <div className="grid gap-3">
-                  <Label htmlFor="technician">Radiologist</Label>
-                  <Input
-                    id="technician"
+                  <Label htmlFor="prescription">
+                    Prescription <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    id="prescription"
                     placeholder=""
                     onChange={handleChange}
+                    required
                   />
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-3 gap-10">
                 <div className="grid gap-3">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea id="notes" placeholder="" onChange={handleChange} />
+                  <Label htmlFor="dosage">
+                    Dosage<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="dosage"
+                    placeholder="500mg"
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="frequency">
+                    Frequency<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="frequency"
+                    placeholder="Twice a day"
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <Label htmlFor="route">
+                    Route<span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="route"
+                    placeholder="Oral"
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
               </div>
 
@@ -180,4 +221,4 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   );
 };
 
-export default AddImagingRequest;
+export default AddMedicationRequest;
