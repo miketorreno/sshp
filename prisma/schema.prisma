@@ -168,7 +168,7 @@ model Visit {
   labOrders     LabOrder[]
   imagingOrders ImagingOrder[]
   procedures    Procedure[]
-  notes         ClinicalNote[]
+  clinicalNotes ClinicalNote[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   deletedAt     DateTime?
@@ -198,23 +198,25 @@ model Appointment {
 
 // Vitals recorded during a visit
 model Vitals {
-  id                     String    @id @default(cuid())
-  recordedAt             DateTime  @default(now())
-  bloodPressureSystolic  Int?
-  bloodPressureDiastolic Int?
-  heartRate              Int?
-  temperatureCelsius     Float?
-  respiratoryRate        Int?
-  oxygenSaturation       Float?
-  glucose                Int?
-  cholesterol            Int?
-  visitId                String
-  visit                  Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  recordedById           String?
-  recordedBy             User?     @relation(fields: [recordedById], references: [id])
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  deletedAt              DateTime?
+  id                 String    @id @default(cuid())
+  visitId            String
+  visit              Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  recordedById       String?
+  recordedBy         User?     @relation(fields: [recordedById], references: [id])
+  recordedAt         DateTime  @default(now())
+  height             Int?
+  weight             Int?
+  systolicBP         Int?
+  diastolicBP        Int?
+  heartRate          Int?
+  temperatureCelsius Float?
+  respiratoryRate    Int?
+  oxygenSaturation   Float?
+  glucose            Int?
+  cholesterol        Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   @@index([visitId])
 }

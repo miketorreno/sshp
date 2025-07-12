@@ -20,23 +20,23 @@ const AddLabRequest = ({ params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
 
     try {
-      const response = await fetch(`/api/visits/${id}`);
+      const res = await fetch(`/api/visits/${id}`);
 
-      if (response.status === 404) {
+      if (res.status === 404) {
         throw new Error("Visit not found");
       }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch visit");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch visit");
       }
 
-      const data = await response.json();
+      const data = await res.json();
       setPatientVisit(data);
       setFormData(data);
     } catch (err) {
       console.error("Error: ", err);
-      toast.error("Failed to load visit");
+      toast.error("Error while fetching visit");
     } finally {
       setLoading(false);
     }
@@ -58,31 +58,28 @@ const AddLabRequest = ({ params }: { params: Promise<{ id: string }> }) => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(
-        `/api/visits/${patientVisit?.id}/request/lab`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            patient: { id: patientVisit?.patient.id },
-            visit: { id: patientVisit?.id },
-          }),
-        }
-      );
+      const res = await fetch(`/api/visits/${patientVisit?.id}/request/lab`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          patient: { id: patientVisit?.patient.id },
+          visit: { id: patientVisit?.id },
+        }),
+      });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create lab request");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add lab request");
       }
 
-      toast.success("Lab request created");
+      toast.success("Lab request added");
       router.push(`/visits/${patientVisit?.id}`);
     } catch (err) {
       console.error("Error: ", err);
-      toast.error("Failed to create lab request");
+      toast.error("Error while adding lab request");
     } finally {
       setIsSubmitting(false);
     }

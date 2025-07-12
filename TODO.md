@@ -10,6 +10,8 @@
   - [ ] Sidebar: make lab, medication & imaging non-collapsible
   - [ ] Use badges for statuses
   - [ ] Change "Loading..." to better UX
+- [ ] Feat
+  - [ ] Vitals: take more observations
 - [ ] DB
   - [ ] remove optional User fields from all tables, when you're done with the user module
   - [ ] Change appointment field: reason to notes

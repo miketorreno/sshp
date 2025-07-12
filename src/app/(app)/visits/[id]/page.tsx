@@ -34,18 +34,18 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
 
     try {
-      const response = await fetch(`/api/visits/${id}`);
+      const res = await fetch(`/api/visits/${id}`);
 
-      if (response.status === 404) {
+      if (res.status === 404) {
         throw new Error("Visit not found");
       }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch visit");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch visit");
       }
 
-      const data = await response.json();
+      const data = await res.json();
       setPatientVisit(data);
     } catch (error) {
       console.error("Error: ", error);
@@ -69,18 +69,15 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
       setIsSubmitting(true);
 
       try {
-        const response = await fetch(
-          `/api/visits/checkout/${patientVisit?.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const res = await fetch(`/api/visits/checkout/${patientVisit?.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
-        const data = await response.json();
-        if (!response.ok) {
+        const data = await res.json();
+        if (!res.ok) {
           throw new Error(data.error || "Failed to checkout patient");
         }
 
@@ -98,11 +95,11 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const handleDelete = async (id: string, type: string) => {
     if (confirm("Are you sure you want to delete this order?")) {
       try {
-        const response = await fetch(`/api/orders/${type}/${id}`, {
+        const res = await fetch(`/api/orders/${type}/${id}`, {
           method: "DELETE",
         });
 
-        if (!response.ok) {
+        if (!res.ok) {
           throw new Error("Failed to delete order");
         }
 
@@ -110,8 +107,27 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
           `${type.charAt(0).toUpperCase() + type.slice(1)} order deleted`
         );
       } catch (error) {
-        console.error("Error deleting order:", error);
-        toast.error("Failed to delete order");
+        console.error("Error while deleting order:", error);
+        toast.error("Error while deleting order");
+      }
+    }
+  };
+
+  const deleteVitals = async (id: string) => {
+    if (confirm("Are you sure you want to delete these vitals?")) {
+      try {
+        const res = await fetch(`/api/vitals/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to delete vitals");
+        }
+
+        toast.success("Vitals deleted");
+      } catch (error) {
+        console.error("Error while deleting vitals:", error);
+        toast.error("Error while deleting vitals");
       }
     }
   };
@@ -411,72 +427,93 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     ))}
                 </TableBody>
               </Table>
-
-              {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Medication
-                  </Button>
-                </Link>
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Imaging
-                  </Button>
-                </Link>
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Lab
-                  </Button>
-                </Link>
-              </div> */}
             </TabsContent>
 
             <TabsContent value="vitals">
-              <Link href="/patients/add">
-                <Button type="button" size={"sm"} className="mb-4">
-                  <Plus />
-                  Add Vitals
-                </Button>
-              </Link>
+              {!patientVisit?.endDateTime && (
+                <Link href={`/visits/${patientVisit?.id}/vitals`}>
+                  <Button type="button" size={"sm"} className="mb-4">
+                    <Plus />
+                    Add Vitals
+                  </Button>
+                </Link>
+              )}
 
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Taken At</TableHead>
-                    <TableHead>Temperature</TableHead>
-                    <TableHead>Weight</TableHead>
                     <TableHead>Height</TableHead>
+                    <TableHead>Weight</TableHead>
+                    <TableHead>Temperature</TableHead>
                     <TableHead>SBP</TableHead>
                     <TableHead>DBP</TableHead>
-                    <TableHead>Heart Rate</TableHead>
-                    <TableHead>Respiratory Rate</TableHead>
+                    <TableHead>Pulse</TableHead>
+                    <TableHead>Respiratory</TableHead>
+                    <TableHead>Oxygen</TableHead>
+                    <TableHead>Glucose</TableHead>
+                    <TableHead>Cholesterol</TableHead>
                     <TableHead>Taken By</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody></TableBody>
+                <TableBody>
+                  {patientVisit?.vitals &&
+                    patientVisit?.vitals.map((vital) => (
+                      <TableRow key={vital.id}>
+                        <TableCell>
+                          {formatDateTime(vital.recordedAt)}
+                        </TableCell>
+                        <TableCell>{vital.height}</TableCell>
+                        <TableCell>{vital.weight}</TableCell>
+                        <TableCell>{vital.temperatureCelsius}</TableCell>
+                        <TableCell>{vital.systolicBP}</TableCell>
+                        <TableCell>{vital.diastolicBP}</TableCell>
+                        <TableCell>{vital.heartRate}</TableCell>
+                        <TableCell>{vital.respiratoryRate}</TableCell>
+                        <TableCell>{vital.oxygenSaturation}</TableCell>
+                        <TableCell>{vital.glucose}</TableCell>
+                        <TableCell>{vital.cholesterol}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(`/vitals/${vital.id}/edit`)
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => deleteVitals(vital.id)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
               </Table>
-
-              {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Vitals
-                  </Button>
-                </Link>
-              </div> */}
             </TabsContent>
 
             <TabsContent value="notes">
-              <Link href="/patients/add">
-                <Button type="button" size={"sm"} className="mb-4">
-                  <Plus />
-                  Add Note
-                </Button>
-              </Link>
+              {!patientVisit?.endDateTime && (
+                <Link href="/patients/add">
+                  <Button type="button" size={"sm"} className="mb-4">
+                    <Plus />
+                    Add Note
+                  </Button>
+                </Link>
+              )}
 
               <Table>
                 <TableHeader>
@@ -501,12 +538,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
             </TabsContent>
 
             <TabsContent value="procedures">
-              <Link href="/patients/add">
-                <Button type="button" size={"sm"} className="mb-4">
-                  <Plus />
-                  Add Procedure
-                </Button>
-              </Link>
+              {!patientVisit?.endDateTime && (
+                <Link href="/patients/add">
+                  <Button type="button" size={"sm"} className="mb-4">
+                    <Plus />
+                    Add Procedure
+                  </Button>
+                </Link>
+              )}
 
               <Table>
                 <TableHeader>
@@ -530,12 +569,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
             </TabsContent>
 
             <TabsContent value="charges">
-              <Link href="/patients/add">
-                <Button type="button" size={"sm"} className="mb-4">
-                  <Plus />
-                  Add Item
-                </Button>
-              </Link>
+              {!patientVisit?.endDateTime && (
+                <Link href="/patients/add">
+                  <Button type="button" size={"sm"} className="mb-4">
+                    <Plus />
+                    Add Item
+                  </Button>
+                </Link>
+              )}
 
               <Table>
                 <TableHeader>

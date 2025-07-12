@@ -59,45 +59,15 @@ interface PatientVisit {
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;
-  patient: {
-    id: string;
-    patientCode: string;
-    firstName: string;
-    middleName: string;
-    lastName: string;
-    dateOfBirth: Datetime;
-    gender: string;
-    bloodGroup: string | null;
-    placeOfBirth: string | null;
-    occupation: string | null;
-    phone: string | null;
-    email: string;
-    address: string | null;
-    country: string | null;
-    guardian: string | null;
-    referredBy: string | null;
-    referredDate: Datetime | null;
-    patientType: string | null;
-    createdAt: Datetime;
-    updatedAt: Datetime;
-    deletedAt: Datetime | null;
-  };
-  provider: {
-    id: string;
-    email: string;
-    password: string | null;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isActive: boolean;
-    avatar: string | null;
-    createdAt: Datetime;
-    updatedAt: Datetime;
-    deletedAt: Datetime | null;
-  };
+  patient: Patient;
+  provider: User;
   imagingOrders: ImagingOrder[];
   labOrders: LabOrder[];
   medOrders: MedicationOrder[];
+  vitals: Vitals[];
+  clinicalNotes: ClinicalNote[];
+  diagnoses: Diagnosis[];
+  procedures: Procedure[];
 }
 
 interface Appointment {
@@ -128,42 +98,8 @@ interface PatientAppointment {
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;
-  patient: {
-    id: string;
-    patientCode: string;
-    firstName: string;
-    middleName: string;
-    lastName: string;
-    dateOfBirth: Datetime;
-    gender: string;
-    bloodGroup: string | null;
-    placeOfBirth: string | null;
-    occupation: string | null;
-    phone: string | null;
-    email: string;
-    address: string | null;
-    country: string | null;
-    guardian: string | null;
-    referredBy: string | null;
-    referredDate: Datetime | null;
-    patientType: string | null;
-    createdAt: Datetime;
-    updatedAt: Datetime;
-    deletedAt: Datetime | null;
-  };
-  provider: {
-    id: string;
-    email: string;
-    password: string | null;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isActive: boolean;
-    avatar: string | null;
-    createdAt: Datetime;
-    updatedAt: Datetime;
-    deletedAt: Datetime | null;
-  };
+  patient: Patient;
+  provider: User;
 }
 
 interface ImagingOrder {
@@ -208,6 +144,26 @@ interface MedicationOrder {
   frequency: string;
   route: string;
   notes: string | null;
+  createdAt: Datetime;
+  updatedAt: Datetime;
+  deletedAt: Datetime | null;
+}
+
+interface Vitals {
+  id: string;
+  visitId: string;
+  recordedById: string | null;
+  recordedAt: Datetime;
+  height: int | null;
+  weight: int | null;
+  systolicBP: int | null;
+  diastolicBP: int | null;
+  heartRate: int | null;
+  temperatureCelsius: float | null;
+  respiratoryRate: int | null;
+  oxygenSaturation: float | null;
+  glucose: int | null;
+  cholesterol: int | null;
   createdAt: Datetime;
   updatedAt: Datetime;
   deletedAt: Datetime | null;

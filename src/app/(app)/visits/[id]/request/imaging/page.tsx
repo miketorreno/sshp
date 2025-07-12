@@ -20,23 +20,23 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
 
     try {
-      const response = await fetch(`/api/visits/${id}`);
+      const res = await fetch(`/api/visits/${id}`);
 
-      if (response.status === 404) {
+      if (res.status === 404) {
         throw new Error("Visit not found");
       }
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (!res.ok) {
+        const error = await res.json();
         throw new Error(error.error || "Failed to fetch visit");
       }
 
-      const data = await response.json();
+      const data = await res.json();
       setPatientVisit(data);
       setFormData(data);
     } catch (err) {
       console.error("Error: ", err);
-      toast.error("Failed to load visit");
+      toast.error("Error while fetching visit");
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(
+      const res = await fetch(
         `/api/visits/${patientVisit?.id}/request/imaging`,
         {
           method: "POST",
@@ -73,16 +73,16 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
         }
       );
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create imaging request");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add imaging request");
       }
 
-      toast.success("Imaging request created");
+      toast.success("Imaging request added");
       router.push(`/visits/${patientVisit?.id}`);
     } catch (error) {
       console.error("Error: ", error);
-      toast.error("Failed to create imaging request");
+      toast.error("Error while adding imaging request");
     } finally {
       setIsSubmitting(false);
     }
