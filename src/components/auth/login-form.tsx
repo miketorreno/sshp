@@ -52,7 +52,7 @@ export default function LoginForm() {
             <form
               action={async () => {
                 "use server";
-                await signIn("github", { redirectTo: "/" });
+                await signIn("github");
               }}
             >
               <Button variant="outline" className="w-full bg-transparent">

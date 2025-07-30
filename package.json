@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.10.0",
     "@clerk/nextjs": "^6.24.0",
     "@fullcalendar/common": "^5.11.5",
     "@fullcalendar/core": "^6.1.18",
@@ -17,7 +16,7 @@
     "@fullcalendar/interaction": "^6.1.18",
     "@fullcalendar/react": "^6.1.18",
     "@fullcalendar/timegrid": "^6.1.18",
-    "@prisma/client": "^6.12.0",
+    "@prisma/client": "^6.11.1",
     "@prisma/extension-accelerate": "^2.0.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.11",
@@ -50,7 +49,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
-    "prisma": "^6.12.0",
+    "prisma": "^6.11.1",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "tw-animate-css": "^1.3.4",
