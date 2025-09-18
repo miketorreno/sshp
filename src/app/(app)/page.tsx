@@ -1,7 +1,5 @@
-import SignIn from "@/components/sign-in";
-
 const Home = () => {
-  return <SignIn />;
+  return <div>Home Sweet Home</div>;
 };
 
 export default Home;

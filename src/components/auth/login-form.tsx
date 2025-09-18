@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Github } from "lucide-react";
-import { signIn } from "@/auth";
 
 export default function LoginForm() {
   return (
@@ -49,17 +48,10 @@ export default function LoginForm() {
               </svg>
               Google
             </Button>
-            <form
-              action={async () => {
-                "use server";
-                await signIn("github");
-              }}
-            >
-              <Button variant="outline" className="w-full bg-transparent">
-                <Github className="mr-2 h-4 w-4" />
-                GitHub
-              </Button>
-            </form>
+            <Button variant="outline" className="w-full bg-transparent">
+              <Github className="mr-2 h-4 w-4" />
+              GitHub
+            </Button>
           </div>
 
           <div className="relative">

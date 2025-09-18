@@ -78,11 +78,12 @@ model User {
   email              String                     @unique
   emailVerified      DateTime?
   password           String
-  firstName          String
-  lastName           String
+  name               String
+  firstName          String?
+  lastName           String?
   role               Role                       @default(USER)
   isActive           Boolean                    @default(true)
-  avatar             String?
+  image              String?
   departmentId       String?
   department         Department?                @relation(fields: [departmentId], references: [id])
   visits             Visit[]
@@ -100,8 +101,11 @@ model User {
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
   deletedAt          DateTime?
+  sessions           Session[]
+  accounts           Account[]
 
   @@index([email])
+  @@map("user")
 }
 
 model Patient {
@@ -197,6 +201,7 @@ model Appointment {
 }
 
 // Vitals recorded during a visit
+
 model Vitals {
   id                 String    @id @default(cuid())
   visitId            String
@@ -222,6 +227,7 @@ model Vitals {
 }
 
 // Diagnoses made during a visit
+
 model Diagnosis {
   id            String    @id @default(cuid())
   icd10Code     String // Standardized diagnosis code (e.g., "J45.909")
@@ -267,6 +273,7 @@ model MedicationOrder {
 }
 
 // Record of a specific medication being given
+
 model MedicationAdministration {
   id               String          @id @default(cuid())
   administeredAt   DateTime        @default(now())
@@ -335,6 +342,7 @@ model ImagingOrder {
 }
 
 // Records of procedures performed
+
 model Procedure {
   id            String    @id @default(cuid())
   cptCode       String? // Standardized procedure code
@@ -357,6 +365,7 @@ model Procedure {
 // -------------------------------------------
 
 // A master list of all medications available
+
 model Medication {
   id            String            @id @default(cuid())
   name          String            @unique // Generic name, e.g., "Ibuprofen"
@@ -370,6 +379,7 @@ model Medication {
 }
 
 // General purpose clinical notes
+
 model ClinicalNote {
   id        String    @id @default(cuid())
   visitId   String
@@ -383,4 +393,49 @@ model ClinicalNote {
   deletedAt DateTime?
 
   @@index([visitId])
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
 }
