@@ -1,7 +1,5 @@
 "use client";
 
-import type React from "react";
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,14 +22,12 @@ export default function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      console.log("Signing up with:", { name, email, password });
       const res = await signUp(name, email, password);
-      console.log(res);
       if (!res.user) {
         alert("Error creating account");
       }
@@ -40,13 +36,6 @@ export default function SignupForm() {
     } finally {
       setIsLoading(false);
     }
-
-    // Simulate form submission
-    // await new Promise((resolve) => setTimeout(resolve, 2000));
-    // setIsLoading(false);
-
-    // Here you would typically handle the form submission
-    // console.log("Form submitted");
   };
 
   const handleSocialSignup = async (provider: string) => {

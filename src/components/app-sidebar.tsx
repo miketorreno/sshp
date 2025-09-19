@@ -1,11 +1,10 @@
 "use client";
-
 import {
-  AudioWaveform,
+  // AudioWaveform,
   CalendarDays,
-  Command,
+  // Command,
   Fullscreen,
-  GalleryVerticalEnd,
+  // GalleryVerticalEnd,
   Microscope,
   Pill,
   Store,
@@ -30,23 +29,23 @@ const data = {
     email: "admin@sshp.com",
     avatar: "/avatars/shadcn.jpg",
   },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
+  // teams: [
+  //   {
+  //     name: "Acme Inc",
+  //     logo: GalleryVerticalEnd,
+  //     plan: "Enterprise",
+  //   },
+  //   {
+  //     name: "Acme Corp.",
+  //     logo: AudioWaveform,
+  //     plan: "Startup",
+  //   },
+  //   {
+  //     name: "Evil Corp.",
+  //     logo: Command,
+  //     plan: "Free",
+  //   },
+  // ],
   navMain: [
     {
       title: "Patients",
@@ -104,49 +103,49 @@ const data = {
       title: "Laboratory",
       url: "/lab",
       icon: Microscope,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/lab/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/lab/completed",
-      //   },
-      // ],
+      isActive: false,
+      items: [
+        {
+          title: "Requests",
+          url: "/lab/requests",
+        },
+        {
+          title: "Completed",
+          url: "/lab/completed",
+        },
+      ],
     },
     {
       title: "Medication",
       url: "/medication",
       icon: Pill,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/medication/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/medication/completed",
-      //   },
-      // ],
+      isActive: false,
+      items: [
+        {
+          title: "Requests",
+          url: "/medication/requests",
+        },
+        {
+          title: "Completed",
+          url: "/medication/completed",
+        },
+      ],
     },
     {
       title: "Imaging",
       url: "/imaging",
       icon: Fullscreen,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/imaging/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/imaging/completed",
-      //   },
-      // ],
+      isActive: false,
+      items: [
+        {
+          title: "Requests",
+          url: "/imaging/requests",
+        },
+        {
+          title: "Completed",
+          url: "/imaging/completed",
+        },
+      ],
     },
     {
       title: "Inventory",

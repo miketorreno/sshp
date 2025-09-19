@@ -75,12 +75,9 @@ enum OrderStatus {
 
 model User {
   id                 String                     @id @default(cuid())
-  email              String                     @unique
-  emailVerified      DateTime?
-  password           String
   name               String
-  firstName          String?
-  lastName           String?
+  email              String                     @unique
+  emailVerified      Boolean
   role               Role                       @default(USER)
   isActive           Boolean                    @default(true)
   image              String?
