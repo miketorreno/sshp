@@ -93,6 +93,7 @@ const AllPatientsPage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Full Name</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Blood</TableHead>
@@ -115,6 +116,7 @@ const AllPatientsPage = () => {
                         {patient.firstName} {patient.middleName}{" "}
                         {patient.lastName}
                       </TableCell>
+                      <TableCell>{patient.email}</TableCell>
                       <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
                       <TableCell>{patient.gender}</TableCell>
                       <TableCell>{patient.bloodGroup}</TableCell>

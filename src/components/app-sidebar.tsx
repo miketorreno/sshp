@@ -12,16 +12,17 @@ import {
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
-import { NavUser } from "@/components/nav-user";
+// import { NavUser } from "@/components/nav-user";
 // import { NavProjects } from "@/components/nav-projects";
 // import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
+  // SidebarFooter,
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import Link from "next/link";
 
 const data = {
   user: {
@@ -51,7 +52,7 @@ const data = {
       title: "Patients",
       url: "/patients",
       icon: User,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Patient",
@@ -79,7 +80,7 @@ const data = {
       title: "Appointments",
       url: "#",
       icon: CalendarDays,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Appointment",
@@ -103,7 +104,7 @@ const data = {
       title: "Laboratory",
       url: "/lab",
       icon: Microscope,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Requests",
@@ -119,7 +120,7 @@ const data = {
       title: "Medication",
       url: "/medication",
       icon: Pill,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Requests",
@@ -135,7 +136,7 @@ const data = {
       title: "Imaging",
       url: "/imaging",
       icon: Fullscreen,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Requests",
@@ -151,7 +152,7 @@ const data = {
       title: "Inventory",
       url: "#",
       icon: Store,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Item",
@@ -187,14 +188,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         {/* <TeamSwitcher teams={data.teams} /> */}
-        {/* <div className="items-center gap-2">SSHP</div> */}
+        <div className="items-center gap-2">
+          <Link href="/">SSHP</Link>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
       </SidebarContent>
-      <SidebarFooter>
+      {/* <SidebarFooter>
         <NavUser user={data.user} />
-      </SidebarFooter>
+      </SidebarFooter> */}
       <SidebarRail />
     </Sidebar>
   );

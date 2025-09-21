@@ -1,20 +1,22 @@
 "use client";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+// import {
+//   Breadcrumb,
+//   BreadcrumbItem,
+//   BreadcrumbLink,
+//   BreadcrumbList,
+//   BreadcrumbPage,
+//   BreadcrumbSeparator,
+// } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
+// import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -26,7 +28,7 @@ const Header = () => {
     <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1" />
-        <Separator
+        {/* <Separator
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
         />
@@ -40,10 +42,10 @@ const Header = () => {
               <BreadcrumbPage>Page</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
-        </Breadcrumb>
+        </Breadcrumb> */}
       </div>
 
-      <div className="ml-auto px-3">
+      <div className="ml-auto flex px-3 gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon">
@@ -62,6 +64,17 @@ const Header = () => {
             <DropdownMenuItem onClick={() => setTheme("system")}>
               System
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>Profile</DropdownMenuItem>
+            <DropdownMenuItem>Billing</DropdownMenuItem>
+            <DropdownMenuItem>Team</DropdownMenuItem>
+            <DropdownMenuItem>Subscription</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

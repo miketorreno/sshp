@@ -18,6 +18,8 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
       <AppSidebar />
       <SidebarInset>
         <Header />
+        {/* <pre>{JSON.stringify(session, null, 2)}</pre> */}
+        {/* <pre>{JSON.stringify(session.user)}</pre> */}
         <div className="p-6 min-h-10/12">{children}</div>
       </SidebarInset>
     </SidebarProvider>
