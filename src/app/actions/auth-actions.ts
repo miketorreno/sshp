@@ -1,11 +1,9 @@
 "use server";
-
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
 const signUp = async (name: string, email: string, password: string) => {
-  console.debug("signUp called with:", { name, email });
-  const result = await auth.api.signUpEmail({
+  const response = await auth.api.signUpEmail({
     body: {
       name,
       email,
@@ -13,26 +11,28 @@ const signUp = async (name: string, email: string, password: string) => {
       callbackURL: "/",
     },
   });
-  console.debug("signUp result:", result);
-  return result;
+
+  return response;
 };
 
 const signIn = async (email: string, password: string) => {
-  console.debug("signIn called with:", { email });
-  const result = await auth.api.signInEmail({
-    body: { email, password, callbackURL: "/" },
+  const response = await auth.api.signInEmail({
+    body: {
+      email,
+      password,
+      callbackURL: "/",
+    },
   });
-  console.debug("signIn result:", result);
-  return result;
+
+  return response;
 };
 
 const signOut = async () => {
-  console.debug("signOut called");
-  const result = await auth.api.signOut({
+  const response = await auth.api.signOut({
     headers: await headers(),
   });
-  console.debug("signOut result:", result);
-  return result;
+
+  return response;
 };
 
 export { signUp, signIn, signOut };

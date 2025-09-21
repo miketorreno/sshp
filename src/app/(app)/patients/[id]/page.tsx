@@ -114,14 +114,14 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         {patient?.bloodGroup}
                       </p>
                     </div>
-                    <div className="my-3">
+                    {/* <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Status
                       </p>
                       <p className="font-semibold text-sm leading-6">
                         {patient?.patientStatus}
                       </p>
-                    </div>
+                    </div> */}
                     <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Phone

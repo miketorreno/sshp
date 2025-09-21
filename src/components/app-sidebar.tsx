@@ -1,11 +1,10 @@
 "use client";
-
 import {
-  AudioWaveform,
+  // AudioWaveform,
   CalendarDays,
-  Command,
+  // Command,
   Fullscreen,
-  GalleryVerticalEnd,
+  // GalleryVerticalEnd,
   Microscope,
   Pill,
   Store,
@@ -13,16 +12,17 @@ import {
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
-import { NavUser } from "@/components/nav-user";
+// import { NavUser } from "@/components/nav-user";
 // import { NavProjects } from "@/components/nav-projects";
 // import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
+  // SidebarFooter,
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import Link from "next/link";
 
 const data = {
   user: {
@@ -30,29 +30,29 @@ const data = {
     email: "admin@sshp.com",
     avatar: "/avatars/shadcn.jpg",
   },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
+  // teams: [
+  //   {
+  //     name: "Acme Inc",
+  //     logo: GalleryVerticalEnd,
+  //     plan: "Enterprise",
+  //   },
+  //   {
+  //     name: "Acme Corp.",
+  //     logo: AudioWaveform,
+  //     plan: "Startup",
+  //   },
+  //   {
+  //     name: "Evil Corp.",
+  //     logo: Command,
+  //     plan: "Free",
+  //   },
+  // ],
   navMain: [
     {
       title: "Patients",
       url: "/patients",
       icon: User,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Patient",
@@ -80,7 +80,7 @@ const data = {
       title: "Appointments",
       url: "#",
       icon: CalendarDays,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Appointment",
@@ -104,55 +104,55 @@ const data = {
       title: "Laboratory",
       url: "/lab",
       icon: Microscope,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/lab/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/lab/completed",
-      //   },
-      // ],
+      isActive: true,
+      items: [
+        {
+          title: "Requests",
+          url: "/lab/requests",
+        },
+        {
+          title: "Completed",
+          url: "/lab/completed",
+        },
+      ],
     },
     {
       title: "Medication",
       url: "/medication",
       icon: Pill,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/medication/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/medication/completed",
-      //   },
-      // ],
+      isActive: true,
+      items: [
+        {
+          title: "Requests",
+          url: "/medication/requests",
+        },
+        {
+          title: "Completed",
+          url: "/medication/completed",
+        },
+      ],
     },
     {
       title: "Imaging",
       url: "/imaging",
       icon: Fullscreen,
-      // isActive: false,
-      // items: [
-      //   {
-      //     title: "Requests",
-      //     url: "/imaging/requests",
-      //   },
-      //   {
-      //     title: "Completed",
-      //     url: "/imaging/completed",
-      //   },
-      // ],
+      isActive: true,
+      items: [
+        {
+          title: "Requests",
+          url: "/imaging/requests",
+        },
+        {
+          title: "Completed",
+          url: "/imaging/completed",
+        },
+      ],
     },
     {
       title: "Inventory",
       url: "#",
       icon: Store,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Add Item",
@@ -188,14 +188,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         {/* <TeamSwitcher teams={data.teams} /> */}
-        {/* <div className="items-center gap-2">SSHP</div> */}
+        <div className="items-center gap-2">
+          <Link href="/">SSHP</Link>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
       </SidebarContent>
-      <SidebarFooter>
+      {/* <SidebarFooter>
         <NavUser user={data.user} />
-      </SidebarFooter>
+      </SidebarFooter> */}
       <SidebarRail />
     </Sidebar>
   );
