@@ -13,21 +13,29 @@ import { Separator } from "@/components/ui/separator";
 import { Github } from "lucide-react";
 import { signIn } from "@/app/actions/auth-actions";
 import { toast } from "sonner";
-import { useState } from "react";
 import { redirect } from "next/navigation";
+import z from "zod";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const schema = z.object({
+  email: z.email(),
+  password: z.string().min(8),
+});
+
+type FormFields = z.infer<typeof schema>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  // const [socialLoading, setSocialLoading] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormFields>({
+    resolver: zodResolver(schema),
+  });
+  const onSubmit: SubmitHandler<FormFields> = async (data) => {
     try {
-      const res = await signIn(email, password);
+      const res = await signIn(data.email, data.password);
       if (!res.user) {
         throw new Error("Failed to login");
       }
@@ -35,8 +43,6 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to login");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -93,18 +99,15 @@ export default function LoginPage() {
         </div>
 
         {/* Email/Password Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              disabled={isLoading}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <Input {...register("email")} id="email" type="email" required />
+            {errors.email && (
+              <p className="text-sm text-red-500">{errors.email.message}</p>
+            )}
           </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
@@ -116,17 +119,18 @@ export default function LoginPage() {
               </Link>
             </div>
             <Input
+              {...register("password")}
               id="password"
               type="password"
               required
-              disabled={isLoading}
               minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
             />
+            {errors.password && (
+              <p className="text-sm text-red-500">{errors.password.message}</p>
+            )}
           </div>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? (
               <>
                 <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-white" />
                 Signing in...

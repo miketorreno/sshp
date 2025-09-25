@@ -14,20 +14,29 @@ import { Github } from "lucide-react";
 import { signUp } from "@/app/actions/auth-actions";
 import { toast } from "sonner";
 import { redirect } from "next/navigation";
+import z from "zod";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const schema = z.object({
+  name: z.string().min(2),
+  email: z.email(),
+  password: z.string().min(8),
+});
+
+type FormFields = z.infer<typeof schema>;
 
 export default function SignupPage() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormFields>({
+    resolver: zodResolver(schema),
+  });
+  const onSubmit: SubmitHandler<FormFields> = async (data) => {
     try {
-      const res = await signUp(name, email, password);
+      const res = await signUp(data.name, data.email, data.password);
       if (!res.user) {
         throw new Error("Failed to create account");
       }
@@ -35,10 +44,10 @@ export default function SignupPage() {
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to create account");
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   const handleSocialSignup = async (provider: string) => {
     setSocialLoading(provider);
@@ -126,46 +135,39 @@ export default function SignupPage() {
         </div>
 
         {/* Email Signup Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              name="name"
-              required
-              disabled={isLoading}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <Input {...register("name")} id="name" type="text" required />
+            {errors.name && (
+              <p className="text-sm text-red-600">{errors.name.message}</p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              disabled={isLoading}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <Input {...register("email")} id="email" type="email" required />
+            {errors.email && (
+              <p className="text-sm text-red-600">{errors.email.message}</p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <Input
+              {...register("password")}
               id="password"
               type="password"
               required
-              disabled={isLoading}
               minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
             />
+            {errors.password && (
+              <p className="text-sm text-red-600">{errors.password.message}</p>
+            )}
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? (
               <>
                 <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-white" />
                 Creating account...

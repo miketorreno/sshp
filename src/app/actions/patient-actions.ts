@@ -13,9 +13,6 @@ export type SearchPatientResponse = {
 export async function searchPatients(
   query: string
 ): Promise<SearchPatientResponse> {
-  // TODO: In production remove this
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
   if (!query) {
     return { patients: [] };
   }
