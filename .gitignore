@@ -42,7 +42,7 @@ next-env.d.ts
 
 /trash
 
-/src/generated/prisma
+/src/generated/
 
 # clerk configuration (can include secrets)
 /.clerk/
