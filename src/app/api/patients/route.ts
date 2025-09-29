@@ -1,31 +1,29 @@
 "use server";
-import { PatientInputSchema } from "@/generated/zod/schemas";
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-// const patientSchema = z.object({
-//   patientCode: z.string(),
-//   firstName: z.string().min(2),
-//   middleName: z.string().min(2),
-//   lastName: z.string().min(2),
-//   dateOfBirth: z.date(),
-//   gender: z.string(),
-//   bloodGroup: z.string().optional(),
-//   placeOfBirth: z.string().optional(),
-//   occupation: z.string().optional(),
-//   phone: z.string().optional(),
-//   email: z.email(),
-//   address: z.string().optional(),
-//   country: z.string().optional(),
-//   guardian: z.string().optional(),
-//   maritalStatus: z.string().optional(),
-//   referredBy: z.string().optional(),
-//   referredDate: z.date().optional(),
-//   patientType: z.string(),
-// });
+const PatientSchema = z.object({
+  firstName: z.string().min(2),
+  middleName: z.string().min(2),
+  lastName: z.string().min(2),
+  dateOfBirth: z.date(),
+  gender: z.string(),
+  bloodGroup: z.string().optional(),
+  placeOfBirth: z.string().optional(),
+  occupation: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.email(),
+  address: z.string().optional(),
+  country: z.string().optional(),
+  guardian: z.string().optional(),
+  maritalStatus: z.string().optional(),
+  referredBy: z.string().optional(),
+  referredDate: z.date().optional(),
+  patientType: z.string().optional(),
+});
 
-const GET = async (request: NextRequest) => {
+export const GET = async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
@@ -46,14 +44,11 @@ const GET = async (request: NextRequest) => {
     return NextResponse.json(patients);
   } catch (error) {
     console.error("Error fetching patients: ", error);
-    return NextResponse.json(
-      { error: "Failed to fetch patients" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch patients" });
   }
 };
 
-const POST = async (request: NextRequest) => {
+export const POST = async (request: NextRequest) => {
   try {
     const body = await request.json();
     const data = {
@@ -62,30 +57,24 @@ const POST = async (request: NextRequest) => {
       referredDate: body.referredDate ? new Date(body.referredDate) : null,
     };
 
-    const parsed = PatientInputSchema.safeParse(data);
-    if (!parsed.success) console.error(parsed.error);
+    // const parsed = PatientInputSchema.safeParse(data);
+    const parsed = PatientSchema.safeParse(data);
+    if (!parsed.success) throw new Error(parsed.error.message);
 
     const patient = await prisma.patient.create({
-      ...data,
-      // data: {
-      // ...data,
-      // ...body,
-      // dateOfBirth: new Date(body.dateOfBirth),
-      // referredDate: body.referredDate ? new Date(body.referredDate) : null,
-      // },
+      data: { ...data },
     });
+
+    if (!patient) {
+      return NextResponse.json({ error: "Failed to create patient" });
+    }
 
     return NextResponse.json(patient, { status: 201 });
   } catch (error) {
     console.error("Error creating patient:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to create patient",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: "Failed to create patient",
+      status: 500,
+    });
   }
 };
-
-export { GET, POST };

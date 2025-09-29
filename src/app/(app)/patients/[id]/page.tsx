@@ -16,43 +16,44 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { calculateAge, formatDate } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Usable, use, useState } from "react";
 import { toast } from "sonner";
 
-const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
-  const [loading, setLoading] = useState(true);
-  const [patient, setPatient] = useState<Patient>();
+async function fetchPatient(id: string) {
+  const response = await fetch(`/api/patients/${id}`).then((res) => res.json());
+  return response;
+}
 
-  const fetchPatient = async () => {
-    const { id } = await params;
+const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
+  const [loading] = useState(true);
 
-    try {
-      const response = await fetch(`/api/patients/${id}`);
+  const { id } = use(params);
 
-      if (response.status === 404) {
-        throw new Error("Patient not found");
-      }
+  const { isPending, error, data } = useQuery({
+    queryKey: ["patient", id],
+    queryFn: () => fetchPatient(id),
+  });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch patient");
-      }
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading patient...</p>
+      </div>
+    );
+  }
 
-      const data = await response.json();
-      setPatient(data);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Failed to load patient");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (error) {
+    toast.error("Failed to load patient");
 
-  useEffect(() => {
-    fetchPatient();
-  }, []);
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Error loading patient</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,101 +63,94 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
       <Card className="mb-8">
         <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center h-40">
-              <p>Loading patient...</p>
-            </div>
-          ) : (
-            <div className="space-y-12">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <Image
-                    src="https://placehold.co/100x100/png"
-                    width={100}
-                    height={100}
-                    alt="profile"
-                    className="rounded-full"
-                  />
-                  <h3 className="text-2xl font-semibold tracking-tight mt-8 mb-4">
-                    {patient?.firstName} {patient?.middleName}{" "}
-                    {patient?.lastName}
-                  </h3>
-                  <Link href={`/patients/${patient?.id}/edit`}>
-                    <Button type="button" size={"sm"}>
-                      Edit Patient
-                    </Button>
-                  </Link>
-                </div>
+          <div className="space-y-12">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <Image
+                  src="https://placehold.co/100x100/png"
+                  width={100}
+                  height={100}
+                  alt="profile"
+                  className="rounded-full"
+                />
+                <h3 className="text-2xl font-semibold tracking-tight mt-8 mb-4">
+                  {data?.firstName} {data?.middleName} {data?.lastName}
+                </h3>
+                <Link href={`/patients/${data?.id}/edit`}>
+                  <Button type="button" size={"sm"}>
+                    Edit Patient
+                  </Button>
+                </Link>
+              </div>
 
-                <div className="col-span-2">
-                  <div className="grid grid-cols-2 md:grid-cols-3">
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Gender
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {patient?.gender}
-                      </p>
-                    </div>
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Age
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {calculateAge(patient?.dateOfBirth)}
-                      </p>
-                    </div>
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Blood
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {patient?.bloodGroup}
-                      </p>
-                    </div>
-                    {/* <div className="my-3">
+              <div className="col-span-2">
+                <div className="grid grid-cols-2 md:grid-cols-3">
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Gender
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {data?.gender}
+                    </p>
+                  </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Age
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {calculateAge(data?.dateOfBirth)}
+                    </p>
+                  </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Blood
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {data?.bloodGroup}
+                    </p>
+                  </div>
+                  {/* <div className="my-3">
                       <p className="text-muted-foreground text-sm leading-6">
                         Status
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        {patient?.patientStatus}
+                        {data?.patientStatus}
                       </p>
                     </div> */}
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Phone
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {patient?.phone}
-                      </p>
-                    </div>
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Email
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {patient?.email}
-                      </p>
-                    </div>
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Appointment
-                      </p>
-                      <p className="font-semibold text-sm leading-6"></p>
-                    </div>
-                    <div className="my-3">
-                      <p className="text-muted-foreground text-sm leading-6">
-                        Registered
-                      </p>
-                      <p className="font-semibold text-sm leading-6">
-                        {formatDate(patient?.createdAt)}
-                      </p>
-                    </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Phone
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {data?.phone}
+                    </p>
+                  </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Email
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {data?.email}
+                    </p>
+                  </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Appointment
+                    </p>
+                    <p className="font-semibold text-sm leading-6"></p>
+                  </div>
+                  <div className="my-3">
+                    <p className="text-muted-foreground text-sm leading-6">
+                      Registered
+                    </p>
+                    <p className="font-semibold text-sm leading-6">
+                      {formatDate(data?.createdAt)}
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 

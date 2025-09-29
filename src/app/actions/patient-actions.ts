@@ -1,10 +1,45 @@
 "use server";
 import prisma from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 export type SearchPatientResponse = {
   patients?: Patient[];
   error?: string;
 };
+
+export async function getPatient(patientId: string) {
+  const patient = await prisma.patient.findUnique({
+    where: {
+      id: patientId,
+    },
+  });
+
+  if (!patient) {
+    return { error: "Patient not found" };
+  }
+
+  return patient;
+}
+
+export async function deletePatient(patientId: string) {
+  const existingPatient = await prisma.patient.findUnique({
+    where: { id: patientId },
+  });
+
+  if (!existingPatient) {
+    return { error: "Patient not found" };
+  }
+
+  await prisma.patient.delete({
+    where: {
+      id: patientId,
+    },
+  });
+
+  revalidatePath("/patients/all");
+  redirect("/patients/all");
+}
 
 /**
  * @param query The search string provided by the patient.
@@ -31,8 +66,6 @@ export async function searchPatients(
     return { patients };
   } catch (err) {
     console.error("Database search failed:", err);
-
-    // Avoid sending raw database error details to the client for security reasons.
     return { error: "Failed to search for patients. Please try again." };
   }
 }

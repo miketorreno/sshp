@@ -16,37 +16,44 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { calculateAge, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+
+async function fetchOutpatients(): Promise<PatientVisit[]> {
+  const response = await fetch("/api/patients/outpatients").then((res) =>
+    res.json()
+  );
+  return response;
+}
 
 const OutpatientsPage = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [outpatients, setOutpatients] = useState<PatientVisit[]>([]);
 
-  const fetchOutpatients = async () => {
-    try {
-      const response = await fetch("/api/patients/outpatients");
-      if (!response.ok) {
-        throw new Error("Failed to fetch outpatients");
-      }
+  const { isPending, error, data } = useQuery({
+    queryKey: ["outpatients"],
+    queryFn: fetchOutpatients,
+  });
 
-      const data = await response.json();
-      setOutpatients(data);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to load outpatients");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading outpatients...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    fetchOutpatients();
-  }, []);
+  if (error) {
+    toast.error("Failed to load outpatients");
+
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Error loading outpatients</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,9 +69,9 @@ const OutpatientsPage = () => {
 
       <Card>
         <CardContent>
-          {loading ? (
+          {data?.length === 0 ? (
             <div className="flex justify-center items-center h-40">
-              <p>Loading outpatients...</p>
+              <p>No outpatients today</p>
             </div>
           ) : (
             <Table>
@@ -84,98 +91,90 @@ const OutpatientsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {outpatients.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
-                      No outpatients today
+                {data.map((outpatient) => (
+                  <TableRow key={outpatient.id}>
+                    <TableCell>
+                      {outpatient.patient.firstName}{" "}
+                      {outpatient.patient.middleName}{" "}
+                      {outpatient.patient.lastName}
+                    </TableCell>
+                    <TableCell>
+                      {calculateAge(outpatient.patient.dateOfBirth)}
+                    </TableCell>
+                    <TableCell>{outpatient.patient.gender}</TableCell>
+                    <TableCell>{outpatient.visitType}</TableCell>
+                    <TableCell>
+                      {formatTime(outpatient.startDateTime)}
+                    </TableCell>
+                    <TableCell></TableCell>
+                    {/* <TableCell>{getLastVisitDate(patient)}</TableCell> */}
+                    <TableCell></TableCell>
+                    {/* <TableCell>{getNextAppointmentDate(patient)}</TableCell> */}
+                    <TableCell>
+                      {outpatient?.provider &&
+                        outpatient?.provider.role === "DOCTOR" && (
+                          <h4 className="text-xl font-semibold">
+                            {outpatient.provider.firstName}{" "}
+                            {outpatient.provider.lastName}
+                          </h4>
+                        )}
+                    </TableCell>
+                    <TableCell>Orders</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/visits/${outpatient.id}`)
+                            }
+                          >
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/visits/${outpatient.id}/edit`)
+                            }
+                          >
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(
+                                `/patients/${outpatient.patient.id}/appointments/new`
+                              )
+                            }
+                          >
+                            Schedule Appointment
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(
+                                `/patients/${outpatient.patient.id}/history`
+                              )
+                            }
+                          >
+                            Medical History
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(
+                                `/patients/${outpatient.patient.id}/prescriptions/new`
+                              )
+                            }
+                          >
+                            Prescribe Medication
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  outpatients.map((outpatient) => (
-                    <TableRow key={outpatient.id}>
-                      <TableCell>
-                        {outpatient.patient.firstName}{" "}
-                        {outpatient.patient.middleName}{" "}
-                        {outpatient.patient.lastName}
-                      </TableCell>
-                      <TableCell>
-                        {calculateAge(outpatient.patient.dateOfBirth)}
-                      </TableCell>
-                      <TableCell>{outpatient.patient.gender}</TableCell>
-                      <TableCell>{outpatient.visitType}</TableCell>
-                      <TableCell>
-                        {formatTime(outpatient.startDateTime)}
-                      </TableCell>
-                      <TableCell></TableCell>
-                      {/* <TableCell>{getLastVisitDate(patient)}</TableCell> */}
-                      <TableCell></TableCell>
-                      {/* <TableCell>{getNextAppointmentDate(patient)}</TableCell> */}
-                      <TableCell>
-                        {outpatient?.provider &&
-                          outpatient?.provider.role === "DOCTOR" && (
-                            <h4 className="text-xl font-semibold">
-                              {outpatient.provider.firstName}{" "}
-                              {outpatient.provider.lastName}
-                            </h4>
-                          )}
-                      </TableCell>
-                      <TableCell>Orders</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/visits/${outpatient.id}`)
-                              }
-                            >
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/visits/${outpatient.id}/edit`)
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/patients/${outpatient.patient.id}/appointments/new`
-                                )
-                              }
-                            >
-                              Schedule Appointment
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/patients/${outpatient.patient.id}/history`
-                                )
-                              }
-                            >
-                              Medical History
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/patients/${outpatient.patient.id}/prescriptions/new`
-                                )
-                              }
-                            >
-                              Prescribe Medication
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
           )}
