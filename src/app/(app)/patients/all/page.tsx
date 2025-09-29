@@ -19,56 +19,40 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { calculateAge } from "@/lib/utils";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { deletePatient } from "@/app/actions/patient-actions";
+
+async function fetchPatients(): Promise<Patient[]> {
+  const response = await fetch("/api/patients").then((res) => res.json());
+  return response;
+}
 
 const AllPatientsPage = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
 
-  const fetchPatients = async () => {
-    try {
-      const response = await fetch("/api/patients");
-      if (!response.ok) {
-        throw new Error("Failed to fetch patients");
-      }
+  const { isPending, error, data } = useQuery({
+    queryKey: ["patients"],
+    queryFn: fetchPatients,
+  });
 
-      const data = await response.json();
-      setFilteredPatients(data);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to load patients");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading patients...</p>
+      </div>
+    );
+  }
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this patient?")) {
-      try {
-        const response = await fetch(`/api/patients/${id}`, {
-          method: "DELETE",
-        });
+  if (error) {
+    toast.error("Failed to load patients");
 
-        if (!response.ok) {
-          throw new Error("Failed to delete patient");
-        }
-
-        setFilteredPatients((prev) =>
-          prev.filter((patient) => patient.id !== id)
-        );
-        toast.success("Patient deleted");
-      } catch (error) {
-        console.error("Error deleting patient:", error);
-        toast.error("Failed to delete patient");
-      }
-    }
-  };
-
-  useEffect(() => {
-    fetchPatients();
-  }, []);
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Error loading patients</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,9 +68,9 @@ const AllPatientsPage = () => {
 
       <Card>
         <CardContent>
-          {loading ? (
+          {data?.length === 0 ? (
             <div className="flex justify-center items-center h-40">
-              <p>Loading patients...</p>
+              <p>No patients found</p>
             </div>
           ) : (
             <Table>
@@ -97,74 +81,67 @@ const AllPatientsPage = () => {
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Blood</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPatients.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12">
-                      No patients found
+                {data.map((patient: Patient) => (
+                  <TableRow key={patient.id}>
+                    <TableCell>
+                      {patient.firstName} {patient.middleName}{" "}
+                      {patient.lastName}
+                    </TableCell>
+                    <TableCell>{patient.email}</TableCell>
+                    <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
+                    <TableCell>{patient.gender}</TableCell>
+                    <TableCell>{patient.bloodGroup}</TableCell>
+                    <TableCell>{patient.phone || "-"}</TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              router.push(`/patients/${patient.id}`)
+                            }
+                          >
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              router.push(`/patients/${patient.id}/edit`)
+                            }
+                          >
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              router.push(`/patients/${patient.id}/history`)
+                            }
+                          >
+                            Medical History
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-600 cursor-pointer"
+                            onClick={async () =>
+                              await deletePatient(patient.id)
+                            }
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  filteredPatients.map((patient) => (
-                    <TableRow key={patient.id}>
-                      <TableCell>
-                        {patient.firstName} {patient.middleName}{" "}
-                        {patient.lastName}
-                      </TableCell>
-                      <TableCell>{patient.email}</TableCell>
-                      <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
-                      <TableCell>{patient.gender}</TableCell>
-                      <TableCell>{patient.bloodGroup}</TableCell>
-                      <TableCell className="capitalize">
-                        patientStatus ??
-                      </TableCell>
-                      <TableCell>{patient.phone || "-"}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/patients/${patient.id}`)
-                              }
-                            >
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/patients/${patient.id}/edit`)
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/patients/${patient.id}/history`)
-                              }
-                            >
-                              Medical History
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => handleDelete(patient.id)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
           )}
