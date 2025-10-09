@@ -33,6 +33,7 @@ export default function LoginPage() {
   } = useForm<FormFields>({
     resolver: zodResolver(schema),
   });
+
   const onSubmit: SubmitHandler<FormFields> = async (data) => {
     try {
       const res = await signIn(data.email, data.password);

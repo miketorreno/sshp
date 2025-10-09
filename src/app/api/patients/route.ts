@@ -17,7 +17,6 @@ const PatientSchema = z.object({
   address: z.string().optional(),
   country: z.string().optional(),
   guardian: z.string().optional(),
-  maritalStatus: z.string().optional(),
   referredBy: z.string().optional(),
   referredDate: z.date().optional(),
   patientType: z.string().optional(),

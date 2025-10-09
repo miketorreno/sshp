@@ -1,8 +1,9 @@
-"use client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { createPatient } from "@/app/actions/patient-actions";
 import {
   Select,
   SelectContent,
@@ -10,71 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 
 const AddPatientPage = () => {
-  const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: "",
-    middleName: "",
-    lastName: "",
-    dateOfBirth: "",
-    gender: "",
-    bloodGroup: "",
-    placeOfBirth: "",
-    occupation: "",
-    phone: "",
-    email: "",
-    address: "",
-    country: "",
-    guardian: "",
-    referredBy: "",
-    referredDate: "",
-  });
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch("/api/patients", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to add patient");
-      }
-
-      toast.success("Patient added");
-      router.push(`/patients/${data.id}`);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Failed to add patient");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -83,7 +21,7 @@ const AddPatientPage = () => {
 
       <Card>
         <CardContent>
-          <form className="space-y-12" onSubmit={handleSubmit}>
+          <form action={createPatient} className="space-y-12">
             <div className="grid md:grid-cols-3 gap-8">
               <div className="grid gap-3">
                 <Label htmlFor="firstName">
@@ -91,10 +29,10 @@ const AddPatientPage = () => {
                 </Label>
                 <Input
                   id="firstName"
+                  name="firstName"
                   placeholder=""
+                  type="text"
                   required
-                  value={formData.firstName}
-                  onChange={handleChange}
                 />
               </div>
 
@@ -104,10 +42,10 @@ const AddPatientPage = () => {
                 </Label>
                 <Input
                   id="middleName"
+                  name="middleName"
                   placeholder=""
+                  type="text"
                   required
-                  value={formData.middleName}
-                  onChange={handleChange}
                 />
               </div>
 
@@ -117,10 +55,10 @@ const AddPatientPage = () => {
                 </Label>
                 <Input
                   id="lastName"
+                  name="lastName"
                   placeholder=""
+                  type="text"
                   required
-                  value={formData.lastName}
-                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -132,10 +70,9 @@ const AddPatientPage = () => {
                 </Label>
                 <Input
                   id="dateOfBirth"
+                  name="dateOfBirth"
                   type="date"
                   required
-                  value={formData.dateOfBirth}
-                  onChange={handleChange}
                 />
               </div>
 
@@ -143,10 +80,7 @@ const AddPatientPage = () => {
                 <Label htmlFor="gender">
                   Gender<span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  required
-                  onValueChange={(value) => handleSelectChange("gender", value)}
-                >
+                <Select name="gender" required>
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
@@ -160,12 +94,7 @@ const AddPatientPage = () => {
 
               <div className="grid gap-3">
                 <Label htmlFor="bloodGroup">Blood Type</Label>
-                <Select
-                  required
-                  onValueChange={(value) =>
-                    handleSelectChange("bloodGroup", value)
-                  }
-                >
+                <Select name="bloodGroup" required>
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
@@ -188,20 +117,14 @@ const AddPatientPage = () => {
                 <Label htmlFor="placeOfBirth">Place of Birth</Label>
                 <Textarea
                   id="placeOfBirth"
+                  name="placeOfBirth"
                   placeholder=""
-                  value={formData.placeOfBirth}
-                  onChange={handleChange}
                 />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="occupation">Occupation</Label>
-                <Textarea
-                  id="occupation"
-                  placeholder=""
-                  value={formData.occupation}
-                  onChange={handleChange}
-                />
+                <Textarea id="occupation" name="occupation" placeholder="" />
               </div>
             </div>
 
@@ -210,48 +133,26 @@ const AddPatientPage = () => {
                 <Label htmlFor="phone">
                   Phone<span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder=""
-                  value={formData.phone}
-                  onChange={handleChange}
-                />
+                <Input id="phone" name="phone" type="tel" placeholder="" />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="email">
                   Email<span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder=""
-                  value={formData.email}
-                  onChange={handleChange}
-                />
+                <Input id="email" name="email" type="email" placeholder="" />
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-10">
               <div className="grid gap-3">
                 <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  placeholder=""
-                  value={formData.address}
-                  onChange={handleChange}
-                />
+                <Textarea id="address" name="address" placeholder="" />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="country">Country</Label>
-                <Textarea
-                  id="country"
-                  placeholder=""
-                  value={formData.country}
-                  onChange={handleChange}
-                />
+                <Textarea id="country" name="country" placeholder="" />
               </div>
             </div>
 
@@ -262,10 +163,9 @@ const AddPatientPage = () => {
                 <Label htmlFor="guardian">Guardian</Label>
                 <Input
                   id="guardian"
+                  name="guardian"
                   type="text"
                   placeholder=""
-                  value={formData.guardian}
-                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -275,10 +175,9 @@ const AddPatientPage = () => {
                 <Label htmlFor="referredBy">Referred By</Label>
                 <Input
                   id="referredBy"
+                  name="referredBy"
                   type="text"
                   placeholder=""
-                  value={formData.referredBy}
-                  onChange={handleChange}
                 />
               </div>
 
@@ -286,16 +185,15 @@ const AddPatientPage = () => {
                 <Label htmlFor="referredDate">Referred Date</Label>
                 <Input
                   id="referredDate"
+                  name="referredDate"
                   type="date"
                   placeholder=""
-                  value={formData.referredDate}
-                  onChange={handleChange}
                 />
               </div>
             </div>
 
-            <Button type="submit" className="mt-4" disabled={isSubmitting}>
-              {isSubmitting ? "Adding..." : "Add Patient"}
+            <Button type="submit" className="mt-4">
+              Add Patient
             </Button>
           </form>
         </CardContent>
