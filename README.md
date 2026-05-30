@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# sshp
 
-## Getting Started
+An Electronic Health Record (EHR) web application built with Next.js.
 
-First, run the development server:
+**Purpose:** a focused interface for managing patients, appointments, visits, orders, and vitals used as a reference implementation and internal tool.
+
+**Status:** active development on the `dev` branch. See the `migrations/` folder for database schema history.
+
+## Key Features
+
+- Appointment scheduling and calendar views
+- Patient management and quick search
+- Visit records and vitals tracking
+- Orders and labs workflow scaffolding
+- Authentication and role-aware UI
+
+## Tech Stack
+
+- Frontend: Next.js + React + TypeScript
+- Styling: global CSS & PostCSS (project uses component-driven UI)
+- Backend / ORM: Prisma with PostgreSQL
+- Auth: NextAuth
+- Tooling: Node.js, npm, ESLint, PostCSS
+
+## Quickstart
+
+Prerequisites:
+
+- Node.js 18+ installed
+- PostgreSQL (local or remote) for development
+
+Typical setup:
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Set up environment variables
+cp .env.example .env
+
+# 3. Run database migrations and seed (if applicable)
+npx prisma migrate dev --name init
+npx prisma db seed
+
+# 4. Start the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Notes:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Generated Prisma client is in `src/generated/prisma` (do not commit local engine files).
+- If you use a different package manager, replace `npm` with `yarn` or `pnpm`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+- `npm run dev` — run the Next.js development server
+- `npm run build` — build the production app
+- `npm run start` — run the production build
+- `npx prisma generate` — regenerate Prisma client
+- `npx prisma migrate dev` — create/apply migrations
 
-To learn more about Next.js, take a look at the following resources:
+## Environment Variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+At minimum, set:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `DATABASE_URL` — Postgres connection string
+- `NEXTAUTH_SECRET` — secret for NextAuth
+- `NEXTAUTH_URL` — (optional) canonical app URL for auth callbacks
 
-## Deploy on Vercel
+There may be additional provider-specific variables required for OAuth providers configured in `[...nextauth]/route.ts`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Database and Prisma
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Schema and migrations are located in the `prisma/` directory. Typical workflow:
+
+```bash
+npx prisma migrate dev --name descriptive_change_name
+npx prisma generate
+npx prisma db seed
+```
+
+Inspect the current schema in `prisma/schema.prisma` and the migration SQL files in `prisma/migrations/`.
+
+## Testing & Linting
+
+- ESLint is configured in `eslint.config.mjs`. Run `npm run lint` if available.
+- Add tests and CI configuration as needed.
+
+## Deployment
+
+This app is ready to deploy to Vercel, Render, or any platform that supports Next.js + Node. Ensure the production database `DATABASE_URL` and `NEXTAUTH_SECRET` are set in the environment.
+
+Recommended Vercel settings:
+
+- Build command: `npm run build`
+- Output directory: (Next.js default)
+
+## Contributing
+
+- Open an issue for bugs or feature requests.
+- Create a branch named `feat/your-feature` or `fix/your-fix` and submit a pull request against `dev` or `main` depending on workflow.
+
+Please run linters and formatters before opening PRs.
+
+## Troubleshooting
+
+- If Prisma complains about migration history, check `prisma/migrations` and ensure the `DATABASE_URL` points to the expected database.
+- For auth issues, verify `NEXTAUTH_URL` and provider credentials.
+
+## Maintainers & Contact
+
+Maintained by the repository owner. For questions or access, open an issue or contact the maintainer via the repository.
+
+## License
+
+See the `LICENSE` file if present. If no license is included this repository is not publicly licensed — contact the maintainer for terms.
