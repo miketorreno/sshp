@@ -60,7 +60,7 @@ const Home = () => {
         <Card className="">
           <CardHeader>
             <CardDescription>Total Visits</CardDescription>
-            <CardTitle className="text-xl font-semibold">836</CardTitle>
+            <CardTitle className="text-xl font-semibold">914</CardTitle>
             <CardAction>
               <Users className="h-6 w-6 text-emerald-400" />
             </CardAction>
@@ -73,7 +73,7 @@ const Home = () => {
         <Card className="">
           <CardHeader>
             <CardDescription>Appointments</CardDescription>
-            <CardTitle className="text-xl font-semibold">218</CardTitle>
+            <CardTitle className="text-xl font-semibold">42</CardTitle>
             <CardAction>
               <CalendarDays className="h-6 w-6 text-emerald-400" />
             </CardAction>
@@ -100,7 +100,7 @@ const Home = () => {
           <CardHeader>
             <CardDescription>Doctors</CardDescription>
             <CardTitle className="text-xl font-semibold">
-              142
+              12
               {/* <span className="text-muted-foreground text-sm ml-2">BPM</span> */}
             </CardTitle>
             <CardAction>

@@ -1,10 +1,10 @@
-# sshp
+# Small Scale Electronic Health Record (EHR) System
 
-An Electronic Health Record (EHR) web application built with Next.js.
+![Dashboard](public/dashboard-light.png)
+
+Full-stack web application for secure patient management and appointment scheduling.
 
 **Purpose:** a focused interface for managing patients, appointments, visits, orders, and vitals used as a reference implementation and internal tool.
-
-**Status:** active development on the `dev` branch. See the `migrations/` folder for database schema history.
 
 ## Key Features
 
