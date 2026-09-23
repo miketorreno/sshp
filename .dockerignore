@@ -1,0 +1,24 @@
+# dependencies
+node_modules
+
+# next.js build output
+.next
+
+# environment files (secrets must not enter the build context)
+.env*
+
+# vcs
+.git
+
+# junk / scratch
+trash
+
+# regenerated in-image by `npx prisma generate`
+src/generated
+
+# misc
+Dockerfile
+docker-compose*.yml
+compose.y*ml
+.vscode
+npm-debug.log*
