@@ -19,7 +19,7 @@ import { calculateAge, formatDate } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { Usable, use, useState } from "react";
+import { use, useState } from "react";
 import { toast } from "sonner";
 
 async function fetchPatient(id: string) {
@@ -27,7 +27,7 @@ async function fetchPatient(id: string) {
   return response;
 }
 
-const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
+const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const [loading] = useState(true);
 
   const { id } = use(params);

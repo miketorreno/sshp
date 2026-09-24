@@ -19,9 +19,7 @@ import { PatientCombobox } from "@/components/patient-combobox";
 const CheckInPage = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [formData, setFormData] = useState({
-    patient: selectedPatient?.id,
     examiner: "",
     startDateTime: "",
     visitType: "",
@@ -83,7 +81,7 @@ const CheckInPage = () => {
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
                 <PatientCombobox
-                  defaultValue={selectedPatient}
+                  defaultValue={null}
                   onSelectChange={(value) =>
                     value && handleComboChange("patient", value)
                   }

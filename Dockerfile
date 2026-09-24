@@ -44,6 +44,8 @@ COPY --from=builder /app/src/generated ./src/generated
 # that ships inside @prisma/engines + the migrations.
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# @prisma/config (a prisma CLI dependency) requires jiti at runtime.
+COPY --from=builder /app/node_modules/jiti ./node_modules/jiti
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder /app/prisma ./prisma
