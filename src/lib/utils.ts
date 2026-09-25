@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function calculateAge(dateOfBirth: Date): number {
+export function calculateAge(dateOfBirth: Date | string): number {
   const today = new Date();
   const dob = new Date(dateOfBirth);
   let age = today.getFullYear() - dob.getFullYear();
@@ -21,7 +21,7 @@ export function calculateAge(dateOfBirth: Date): number {
   return age;
 }
 
-export function formatDate(date: Date) {
+export function formatDate(date: Date | string) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {
     month: "short",

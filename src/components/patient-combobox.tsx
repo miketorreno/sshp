@@ -16,45 +16,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { searchPatients } from "@/app/actions/patient-actions";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePatientSearch } from "@/client/patients/queries";
+import type { PatientSummaryDto } from "@/server/patients/dto";
 
 interface PatientComboboxProps {
-  defaultValue: Patient | null;
-  onSelectChange: (value: Patient | null) => void;
+  defaultValue: PatientSummaryDto | null;
+  onSelectChange: (value: PatientSummaryDto | null) => void;
 }
-
-// A custom hook to debounce the search, which is a crucial performance pattern
-const useDebouncedSearch = (query: string) => {
-  const [result, setResult] = useState<{
-    patients?: Patient[];
-    error?: string;
-    isLoading: boolean;
-  }>({
-    patients: [],
-    error: undefined,
-    isLoading: false,
-  });
-
-  useEffect(() => {
-    if (!query) {
-      setResult({ patients: [], error: undefined, isLoading: false });
-      return;
-    }
-
-    setResult((prev) => ({ ...prev, isLoading: true }));
-
-    const handler = setTimeout(() => {
-      searchPatients(query).then((response) => {
-        setResult({ ...response, isLoading: false });
-      });
-    }, 300);
-
-    return () => clearTimeout(handler);
-  }, [query]);
-
-  return result;
-};
 
 export function PatientCombobox({
   defaultValue,
@@ -63,8 +33,11 @@ export function PatientCombobox({
   const [open, setOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(defaultValue);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(searchQuery.trim());
 
-  const { patients, error, isLoading } = useDebouncedSearch(searchQuery);
+  const { isFetching, isError, error, data: patients } =
+    usePatientSearch(debouncedQuery);
+  const isSearching = debouncedQuery.length > 0;
   const triggerId = useId();
 
   return (
@@ -96,17 +69,23 @@ export function PatientCombobox({
               onValueChange={setSearchQuery}
             />
             <CommandList>
-              {isLoading && (
+              {isFetching && (
                 <div className="p-2 flex justify-center items-center">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {!isLoading && !error && patients?.length === 0 && (
-                <CommandEmpty>No patient found.</CommandEmpty>
+              {isError && (
+                <p className="p-2 text-sm text-red-500">
+                  {error instanceof Error
+                    ? error.message
+                    : "Failed to search patients"}
+                </p>
               )}
 
-              {error && <p className="p-2 text-sm text-red-500">{error}</p>}
+              {!isFetching && isSearching && !patients?.length && (
+                <CommandEmpty>No patient found.</CommandEmpty>
+              )}
 
               <CommandGroup>
                 {patients?.map((patient) => (

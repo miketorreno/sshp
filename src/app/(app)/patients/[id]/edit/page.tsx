@@ -11,46 +11,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { use, useActionState, useEffect, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { formatFetchedDate } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import { updatePatient } from "@/app/actions/patient-actions";
+import { usePatientDetail } from "@/client/patients/queries";
+import type { PatientDetailDto } from "@/server/patients/dto";
 
-async function fetchPatient(id: string) {
-  const response = await fetch(`/api/patients/${id}`).then((res) => res.json());
-  return response;
-}
 
-type PatientFormData = {
-  id?: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: string;
-  bloodGroup: string;
-  placeOfBirth?: string;
-  occupation?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  country?: string;
-  guardian?: string;
-  referredBy?: string;
-  referredDate?: string;
-};
+type PatientActionState = Awaited<ReturnType<typeof updatePatient>> | null;
 
 const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
   const { id } = use(params);
-  const [formData, setFormData] = useState<PatientFormData | null>(null);
+  const [formData, setFormData] = useState<PatientDetailDto | null>(null);
 
-  const { isPending, error, data } = useQuery({
-    queryKey: ["patient", id],
-    queryFn: () => fetchPatient(id),
-  });
+  const { isPending, isError, data } = usePatientDetail(id);
+  const [result, submit, isSubmitting] = useActionState(
+    async (
+      _previous: PatientActionState,
+      formData: FormData
+    ) => updatePatient(formData),
+    null
+  );
 
   useEffect(() => {
     if (data) {
@@ -62,14 +45,14 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev: PatientFormData | null) => ({
+    setFormData((prev) => ({
       ...prev!,
       [name]: value,
     }));
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev: PatientFormData | null) => ({
+    setFormData((prev) => ({
       ...prev!,
       [name]: value,
     }));
@@ -83,9 +66,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
     );
   }
 
-  if (error) {
-    toast.error("Failed to load patient");
-
+  if (isError) {
     return (
       <div className="flex justify-center items-center h-40">
         <p className="text-red-600">Error loading patient</p>
@@ -101,7 +82,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
       <Card className="mb-8">
         <CardContent>
-          <form action={updatePatient} className="space-y-12">
+          <form action={submit} className="space-y-12">
             <input type="hidden" name="id" value={id} />
             <div className="grid md:grid-cols-3 gap-8">
               <div className="grid gap-3">
@@ -181,7 +162,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <Select
                   name="bloodGroup"
                   required
-                  value={formData.bloodGroup}
+                  value={formData.bloodGroup ?? ""}
                   onValueChange={(value) =>
                     handleSelectChange("bloodGroup", value)
                   }
@@ -245,7 +226,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   id="email"
                   name="email"
                   type="email"
-                  value={formData.email}
+                  value={formData.email ?? ""}
                   onChange={handleChange}
                 />
               </div>
@@ -310,8 +291,12 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
               </div>
             </div>
 
-            <Button type="submit" className="mt-4 mr-2">
-              Update Patient
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
+
+            <Button type="submit" className="mt-4 mr-2" disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Update Patient"}
             </Button>
             <Button type="button" onClick={() => router.back()}>
               Back

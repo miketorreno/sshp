@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PatientCombobox } from "@/components/patient-combobox";
+import type { PatientSummaryDto } from "@/server/patients/dto";
 
 const CheckInPage = () => {
   const router = useRouter();
@@ -37,7 +38,7 @@ const CheckInPage = () => {
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
-  const handleComboChange = (id: string, value: Patient | null) => {
+  const handleComboChange = (id: string, value: PatientSummaryDto | null) => {
     setFormData((prev) => ({ ...prev, [id]: value?.id || "" }));
   };
 
