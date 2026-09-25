@@ -40,21 +40,21 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-sshp}?schema=public
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
   # Dev loop: `docker compose --profile dev up`. Built from the deps stage so
-  # node_modules/.bin come from the in-image `npm ci` (native bcrypt/prebuilds
-  # match alpine/musl); source is bind-mounted. The entrypoint regenerates the
-  # Prisma clients before starting the Turbopack dev server.
+  # node_modules/.bin come from the in-image `npm ci`; source is bind-mounted.
+  # The command migrates and regenerates Prisma before starting Turbopack.
   dev:
     profiles: ["dev"]
     build:
       context: .
       dockerfile: Dockerfile
       target: deps
-    command: sh -c "npx prisma generate && npm run dev"
+    command: sh -c "npx prisma migrate deploy && npx prisma generate && exec npm run dev"
     depends_on:
       db:
         condition: service_healthy
@@ -65,8 +65,9 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-sshp}?schema=public
+      BETTER_AUTH_URL: ${BETTER_AUTH_DEV_URL:-http://localhost:3001}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       - .:/app
       - node_modules:/app/node_modules

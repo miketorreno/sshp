@@ -19,7 +19,7 @@ Full-stack web application for secure patient management and appointment schedul
 - Frontend: Next.js + React + TypeScript
 - Styling: global CSS & PostCSS (project uses component-driven UI)
 - Backend / ORM: Prisma with PostgreSQL
-- Auth: NextAuth
+- Auth: Better Auth
 - Tooling: Node.js, npm, ESLint, PostCSS
 
 ## Quickstart
@@ -66,10 +66,10 @@ Notes:
 At minimum, set:
 
 - `DATABASE_URL` — Postgres connection string
-- `NEXTAUTH_SECRET` — secret for NextAuth
-- `NEXTAUTH_URL` — (optional) canonical app URL for auth callbacks
+- `BETTER_AUTH_SECRET` — secret for Better Auth
+- `BETTER_AUTH_URL` — canonical app URL for authentication
 
-There may be additional provider-specific variables required for OAuth providers configured in `[...nextauth]/route.ts`.
+There may be additional provider-specific variables required for social providers configured in `src/lib/auth.ts`.
 
 ## Database and Prisma
 
@@ -90,7 +90,7 @@ Inspect the current schema in `prisma/schema.prisma` and the migration SQL files
 
 ## Deployment
 
-This app is ready to deploy to Vercel, Render, or any platform that supports Next.js + Node. Ensure the production database `DATABASE_URL` and `NEXTAUTH_SECRET` are set in the environment.
+This app is ready to deploy to Vercel, Render, or any platform that supports Next.js + Node. Ensure the production database `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` are set in the environment.
 
 Recommended Vercel settings:
 
@@ -107,7 +107,7 @@ Please run linters and formatters before opening PRs.
 ## Troubleshooting
 
 - If Prisma complains about migration history, check `prisma/migrations` and ensure the `DATABASE_URL` points to the expected database.
-- For auth issues, verify `NEXTAUTH_URL` and provider credentials.
+- For auth issues, verify `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, and any configured social-provider credentials.
 
 ## Maintainers & Contact
 
