@@ -4,86 +4,62 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { use, useActionState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { requestLabOrder } from "@/app/actions/order-actions";
+import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
+import { visitPage } from "@/server/visits/contract";
 
+type LabOrderActionState = Awaited<ReturnType<typeof requestLabOrder>> | null;
+
+/**
+ * A lab request belongs to the visit the page is on, so the visit is named by the
+ * page rather than chosen here, and the new order is read back from that visit.
+ */
 const AddLabRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<PatientVisit>();
-  const [patientVisit, setPatientVisit] = useState<PatientVisit>();
+  const queryClient = useQueryClient();
+  const { id } = use(params);
+  const { data: visit, isPending, isError } = useVisitDetail(id);
 
-  const fetchVisit = async () => {
-    const { id } = await params;
+  // The action reports rather than redirecting, so the visit carrying the new
+  // order is re-read before the page moves back to it.
+  const [result, submit, isSubmitting] = useActionState(
+    async (_previous: LabOrderActionState, formData: FormData) => {
+      const outcome = await requestLabOrder(formData);
 
-    try {
-      const res = await fetch(`/api/visits/${id}`);
-
-      if (res.status === 404) {
-        throw new Error("Visit not found");
+      if (outcome.ok) {
+        await invalidateVisitWrites(queryClient, id);
+        router.push(visitPage(id));
       }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to fetch visit");
-      }
+      return outcome;
+    },
+    null,
+  );
 
-      const data = await res.json();
-      setPatientVisit(data);
-      setFormData(data);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Error while fetching visit");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading visit...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    fetchVisit();
-  }, []);
+  if (isError || !visit) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Visit not found</p>
+      </div>
+    );
+  }
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch(`/api/visits/${patientVisit?.id}/request/lab`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          patient: { id: patientVisit?.patient.id },
-          visit: { id: patientVisit?.id },
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to add lab request");
-      }
-
-      toast.success("Lab request added");
-      router.push(`/visits/${patientVisit?.id}`);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Error while adding lab request");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const fieldError = (field: string) =>
+    result && !result.ok && result.error.fieldErrors?.[field]
+      ? result.error.fieldErrors[field][0]
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,80 +69,59 @@ const AddLabRequest = ({ params }: { params: Promise<{ id: string }> }) => {
 
       <Card className="mb-8">
         <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center h-40">
-              <p>Loading...</p>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="id" value={visit.id} />
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="patient">Patient</Label>
+                <Input
+                  id="patient"
+                  value={`${visit.patient.firstName} ${visit.patient.middleName} ${visit.patient.lastName}`}
+                  disabled
+                />
+              </div>
+
+              <div className="grid gap-3">
+                <Label htmlFor="visit">Visit</Label>
+                <Input
+                  id="visit"
+                  value={`${formatDateTime(visit.startDateTime)} - ${visit.visitType}`}
+                  disabled
+                />
+              </div>
             </div>
-          ) : (
-            <form className="space-y-12" onSubmit={handleSubmit}>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="patient">
-                    Patient<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="patient"
-                    placeholder=""
-                    value={
-                      formData?.patient
-                        ? `${formData.patient.firstName} ${formData.patient.middleName} ${formData.patient.lastName}`
-                        : ""
-                    }
-                    disabled
-                  />
-                </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="visit">Visit</Label>
-                  <Input
-                    id="visit"
-                    placeholder=""
-                    value={`${formatDateTime(formData?.startDateTime)} - ${
-                      formData?.visitType
-                    }`}
-                    onChange={handleChange}
-                    disabled
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="labType">
+                  Lab Type<span className="text-red-500">*</span>
+                </Label>
+                <Input id="labType" name="labType" placeholder="" required />
+                {fieldError("labType") && (
+                  <p className="text-sm text-red-600">{fieldError("labType")}</p>
+                )}
               </div>
+            </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="labType">
-                    Lab Type<span className="text-red-500">*</span>
-                  </Label>
-                  <Input id="labType" placeholder="" onChange={handleChange} />
-                </div>
-
-                <div className="grid gap-3">
-                  <Label htmlFor="technician">Technician</Label>
-                  <Input
-                    id="technician"
-                    placeholder=""
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid gap-3">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea id="notes" name="notes" placeholder="" />
               </div>
+            </div>
 
-              <div className="grid md:grid-cols-2 gap-10">
-                <div className="grid gap-3">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea id="notes" placeholder="" onChange={handleChange} />
-                </div>
-              </div>
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
 
-              <Button
-                type="submit"
-                className="mt-4 mr-2"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Adding..." : "Add Request"}
-              </Button>
-              <Button type="button" onClick={() => router.back()}>
-                Back
-              </Button>
-            </form>
-          )}
+            <Button type="submit" className="mt-4 mr-2" disabled={isSubmitting}>
+              {isSubmitting ? "Adding..." : "Add Request"}
+            </Button>
+            <Button type="button" onClick={() => router.back()}>
+              Back
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

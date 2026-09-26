@@ -1,0 +1,79 @@
+name: sshp
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sshp}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sshp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    # Only the app needs to reach Postgres (over the compose network); no host
+    # port mapping, so it never collides with a host-local Postgres on 5432.
+    restart: unless-stopped
+
+  # Production-ish run: `docker compose up --build`. The image builds the
+  # standalone Next bundle; the entrypoint runs `prisma migrate deploy` then
+  # the standalone `node server.js`.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    # App secrets/BETTER_AUTH_* come from the local env files; Compose reads
+    # `.env` for substitution and both files are injected into the container.
+    # `environment:` overrides `env_file:`, so DATABASE_URL below (pointing at
+    # the `db` service) always wins over a localhost pointer in `.env`.
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-sshp}?schema=public
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+  # Dev loop: `docker compose --profile dev up`. Built from the deps stage so
+  # node_modules/.bin come from the in-image `npm ci`; source is bind-mounted.
+  # The command migrates and regenerates Prisma before starting Turbopack.
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    command: sh -c "npx prisma migrate deploy && npx prisma generate && exec npm run dev"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-sshp}?schema=public
+      BETTER_AUTH_URL: ${BETTER_AUTH_DEV_URL:-http://localhost:3001}
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - next_dev:/app/.next
+
+volumes:
+  pgdata:
+  node_modules:
+  next_dev:

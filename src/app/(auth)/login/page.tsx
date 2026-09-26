@@ -13,7 +13,6 @@ import { Separator } from "@/components/ui/separator";
 import { Github } from "lucide-react";
 import { signIn } from "@/app/actions/auth-actions";
 import { toast } from "sonner";
-import { redirect } from "next/navigation";
 import z from "zod";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,17 +33,12 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
   });
 
+  // Signing in either opens the session and redirects into the clinic, or comes
+  // back as a failure the form shows. The client never navigates itself.
   const onSubmit: SubmitHandler<FormFields> = async (data) => {
-    try {
-      const res = await signIn(data.email, data.password);
-      if (!res.user) {
-        throw new Error("Failed to login");
-      }
-      redirect("/");
-    } catch (error) {
-      console.error("Error:", error);
-      toast.error("Failed to login");
-    }
+    const result = await signIn(data.email, data.password);
+
+    if (!result.ok) toast.error(result.error.message);
   };
 
   return (

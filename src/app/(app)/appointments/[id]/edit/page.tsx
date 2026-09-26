@@ -9,12 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatFetchedDateTime } from "@/lib/utils";
+import { formatFetchedLocalDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { use, useActionState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { updateAppointment } from "@/app/actions/appointment-actions";
+import { useAppointmentDetail } from "@/client/appointments/queries";
+
+type AppointmentActionState =
+  | Awaited<ReturnType<typeof updateAppointment>>
+  | null;
 
 const EditAppointmentPage = ({
   params,
@@ -22,244 +27,171 @@ const EditAppointmentPage = ({
   params: Promise<{ id: string }>;
 }) => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<PatientAppointment>();
-  const [patientAppointment, setPatientAppointment] =
-    useState<PatientAppointment>();
-  const [startDateTimeValue, setStartDateTimeValue] = useState("");
-  const [endDateTimeValue, setEndDateTimeValue] = useState("");
+  const { id } = use(params);
+  const { isPending, isError, data: appointment } = useAppointmentDetail(id);
+  const [result, submit, isSubmitting] = useActionState(
+    async (
+      _previous: AppointmentActionState,
+      formData: FormData
+    ) => updateAppointment(formData),
+    null
+  );
 
-  const fetchAppointment = async () => {
-    const { id } = await params;
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading appointment...</p>
+      </div>
+    );
+  }
 
-    try {
-      const response = await fetch(`/api/appointments/${id}`);
+  if (isError || !appointment) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Appointment not found</p>
+      </div>
+    );
+  }
 
-      if (response.status === 404) {
-        throw new Error("Appointment not found");
-      }
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch appointment");
-      }
-
-      const data = await response.json();
-      setPatientAppointment(data);
-      setFormData(data);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Failed to load appointment");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAppointment();
-  }, []);
-
-  useEffect(() => {
-    if (patientAppointment) {
-      setStartDateTimeValue(
-        formatFetchedDateTime(patientAppointment.startDateTime)
-      );
-      setEndDateTimeValue(
-        formatFetchedDateTime(patientAppointment.endDateTime)
-      );
-    }
-  }, [patientAppointment]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientAppointment));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientAppointment));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(
-        `/api/appointments/${patientAppointment?.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update appointment");
-      }
-
-      toast.success("Appointment updated");
-      router.push(`/appointments/all`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to update appointment");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const fieldError = (field: string) =>
+    result && !result.ok && result.error.fieldErrors?.[field]
+      ? result.error.fieldErrors[field][0]
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Appointment Info</h1>
+        <h1 className="text-2xl font-bold my-2">Edit Appointment</h1>
       </div>
 
       <Card className="mb-8">
         <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center h-40">
-              <p>Loading appointment...</p>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="id" value={appointment.id} />
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="patient">Patient</Label>
+                <Input
+                  id="patient"
+                  value={`${appointment.patient.firstName} ${appointment.patient.middleName} ${appointment.patient.lastName}`}
+                  disabled
+                />
+              </div>
+
+              <div className="grid gap-3">
+                <Label htmlFor="provider">Provider</Label>
+                <Input
+                  id="provider"
+                  value={
+                    appointment.provider?.role === "DOCTOR"
+                      ? appointment.provider.name
+                      : "Unassigned"
+                  }
+                  disabled
+                />
+              </div>
             </div>
-          ) : (
-            <form className="space-y-12" onSubmit={handleSubmit}>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="patient">
-                    Patient<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="patient"
-                    placeholder=""
-                    value={
-                      formData?.patient
-                        ? `${formData.patient.firstName} ${formData.patient.middleName} ${formData.patient.lastName}`
-                        : ""
-                    }
-                    onChange={handleChange}
-                    disabled
-                  />
-                </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="examiner">Examiner</Label>
-                  <Input
-                    id="examiner"
-                    placeholder=""
-                    value={
-                      formData?.provider
-                        ? `${formData.provider.firstName} ${formData.provider.lastName}`
-                        : ""
-                    }
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="startDateTime">
+                  Start Date<span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="startDateTime"
+                  name="startDateTime"
+                  type="datetime-local"
+                  required
+                  defaultValue={formatFetchedLocalDateTime(
+                    appointment.startDateTime
+                  )}
+                />
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="startDateTime">
-                    Start Date<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="startDateTime"
-                    type="datetime-local"
-                    required
-                    value={startDateTimeValue}
-                    onChange={handleChange}
-                  />
-                </div>
+              <div className="grid gap-3">
+                <Label htmlFor="endDateTime">
+                  End Date<span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="endDateTime"
+                  name="endDateTime"
+                  type="datetime-local"
+                  required
+                  defaultValue={formatFetchedLocalDateTime(
+                    appointment.endDateTime
+                  )}
+                />
+                {fieldError("endDateTime") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("endDateTime")}
+                  </p>
+                )}
+              </div>
+            </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="endDateTime">
-                    End Date<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="endDateTime"
-                    type="datetime-local"
-                    required
-                    value={endDateTimeValue}
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="appointmentType">
+                  Type<span className="text-red-500">*</span>
+                </Label>
+                <Select name="appointmentType" required defaultValue={appointment.appointmentType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMISSION">Admission</SelectItem>
+                    <SelectItem value="CLINIC">Clinic</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                    <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
+                    <SelectItem value="IMAGING">Imaging</SelectItem>
+                    <SelectItem value="LAB">Lab</SelectItem>
+                    <SelectItem value="PHARMACY">Pharmacy</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="appointmentType">
-                    Type<span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    required
-                    value={patientAppointment?.appointmentType}
-                    onValueChange={(value) =>
-                      handleSelectChange("appointmentType", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ADMISSION">Admission</SelectItem>
-                      <SelectItem value="CLINIC">Clinic</SelectItem>
-                      <SelectItem value="EMERGENCY">Emergency</SelectItem>
-                      <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
-                      <SelectItem value="IMAGING">Imaging</SelectItem>
-                      <SelectItem value="LAB">Lab</SelectItem>
-                      <SelectItem value="PHARMACY">Pharmacy</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-3">
-                  <Label htmlFor="appointmentStatus">Status</Label>
-                  <Select
-                    value={patientAppointment?.appointmentStatus}
-                    onValueChange={(value) =>
-                      handleSelectChange("appointmentStatus", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ATTENDED">Attended</SelectItem>
-                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                      <SelectItem value="MISSED">Missed</SelectItem>
-                      <SelectItem value="SCHEDULED">Scheduled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid gap-3">
+                <Label htmlFor="appointmentStatus">Status</Label>
+                <Select
+                  name="appointmentStatus"
+                  defaultValue={appointment.appointmentStatus}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ATTENDED">Attended</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    <SelectItem value="MISSED">Missed</SelectItem>
+                    <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
 
-              <div className="grid md:grid-cols-2 gap-10">
-                <div className="grid gap-3">
-                  <Label htmlFor="reason">Reason</Label>
-                  <Textarea
-                    id="reason"
-                    placeholder=""
-                    value={formData?.reason || ""}
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid gap-3">
+                <Label htmlFor="reason">Reason</Label>
+                <Textarea
+                  id="reason"
+                  name="reason"
+                  defaultValue={appointment.reason ?? ""}
+                />
               </div>
+            </div>
 
-              <Button
-                type="submit"
-                className="mt-4 mr-2"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Updating..." : "Update Appointment"}
-              </Button>
-              <Button type="button" onClick={() => router.back()}>
-                Back
-              </Button>
-            </form>
-          )}
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
+
+            <Button type="submit" className="mt-4 mr-2" disabled={isSubmitting}>
+              {isSubmitting ? "Updating..." : "Update Appointment"}
+            </Button>
+            <Button type="button" onClick={() => router.back()}>
+              Back
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

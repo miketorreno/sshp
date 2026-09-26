@@ -16,26 +16,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { calculateAge, formatDate } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { usePatientDetail } from "@/client/patients/queries";
 import Image from "next/image";
 import Link from "next/link";
-import { Usable, use, useState } from "react";
-import { toast } from "sonner";
+import { use, useState } from "react";
 
-async function fetchPatient(id: string) {
-  const response = await fetch(`/api/patients/${id}`).then((res) => res.json());
-  return response;
-}
-
-const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
+const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const [loading] = useState(true);
 
   const { id } = use(params);
 
-  const { isPending, error, data } = useQuery({
-    queryKey: ["patient", id],
-    queryFn: () => fetchPatient(id),
-  });
+  const { isPending, isError, data: patient } = usePatientDetail(id);
 
   if (isPending) {
     return (
@@ -45,9 +36,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
     );
   }
 
-  if (error) {
-    toast.error("Failed to load patient");
-
+  if (isError || !patient) {
     return (
       <div className="flex justify-center items-center h-40">
         <p className="text-red-600">Error loading patient</p>
@@ -74,9 +63,9 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                   className="rounded-full"
                 />
                 <h3 className="text-2xl font-semibold tracking-tight mt-8 mb-4">
-                  {data?.firstName} {data?.middleName} {data?.lastName}
+                  {patient.firstName} {patient.middleName} {patient.lastName}
                 </h3>
-                <Link href={`/patients/${data?.id}/edit`}>
+                <Link href={`/patients/${patient.id}/edit`}>
                   <Button type="button" size={"sm"}>
                     Edit Patient
                   </Button>
@@ -90,7 +79,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Gender
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {data?.gender}
+                      {patient.gender}
                     </p>
                   </div>
                   <div className="my-3">
@@ -98,7 +87,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Age
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {calculateAge(data?.dateOfBirth)}
+                      {calculateAge(patient.dateOfBirth)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -106,7 +95,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Blood
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {data?.bloodGroup}
+                      {patient.bloodGroup}
                     </p>
                   </div>
                   {/* <div className="my-3">
@@ -114,7 +103,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                         Status
                       </p>
                       <p className="font-semibold text-sm leading-6">
-                        {data?.patientStatus}
+                        {patient.patientStatus}
                       </p>
                     </div> */}
                   <div className="my-3">
@@ -122,7 +111,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Phone
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {data?.phone}
+                      {patient.phone}
                     </p>
                   </div>
                   <div className="my-3">
@@ -130,7 +119,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Email
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {data?.email}
+                      {patient.email}
                     </p>
                   </div>
                   <div className="my-3">
@@ -144,7 +133,7 @@ const PatientPage = ({ params }: { params: Usable<{ id: string }> }) => {
                       Registered
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDate(data?.createdAt)}
+                      {formatDate(patient.createdAt)}
                     </p>
                   </div>
                 </div>

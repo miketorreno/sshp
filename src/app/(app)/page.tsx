@@ -12,16 +12,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { useState } from "react";
 import { Bar, BarChart } from "recharts";
 // import { ChartContainer, ChartTooltipContent } from "@/components/ui/charts";
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
+import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,

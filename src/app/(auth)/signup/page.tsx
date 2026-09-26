@@ -13,7 +13,6 @@ import { Separator } from "@/components/ui/separator";
 import { Github } from "lucide-react";
 import { signUp } from "@/app/actions/auth-actions";
 import { toast } from "sonner";
-import { redirect } from "next/navigation";
 import z from "zod";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,17 +33,12 @@ export default function SignupPage() {
   } = useForm<FormFields>({
     resolver: zodResolver(schema),
   });
+  // Signing up either opens the session and redirects into the clinic, or comes
+  // back as a failure the form shows. The client never navigates itself.
   const onSubmit: SubmitHandler<FormFields> = async (data) => {
-    try {
-      const res = await signUp(data.name, data.email, data.password);
-      if (!res.user) {
-        throw new Error("Failed to create account");
-      }
-      redirect("/");
-    } catch (error) {
-      console.error("Error:", error);
-      toast.error("Failed to create account");
-    }
+    const result = await signUp(data.name, data.email, data.password);
+
+    if (!result.ok) toast.error(result.error.message);
   };
 
   const [socialLoading, setSocialLoading] = useState<string | null>(null);

@@ -11,65 +11,48 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { toast } from "sonner";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { createVisit } from "@/app/actions/visit-actions";
+import { invalidateVisitWrites } from "@/client/visits/queries";
+import { visitPage } from "@/server/visits/contract";
 import { PatientCombobox } from "@/components/patient-combobox";
+import type { PatientSummaryDto } from "@/server/patients/dto";
 
+/**
+ * Checking someone in is opening a visit for a patient who is already on file, so
+ * the form names the patient and the time; the visit is attributed to the
+ * signed-in staff member by the command.
+ */
 const CheckInPage = () => {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [formData, setFormData] = useState({
-    patient: selectedPatient?.id,
-    examiner: "",
-    startDateTime: "",
-    visitType: "",
-    reason: "",
-  });
+  const queryClient = useQueryClient();
+  const [patientId, setPatientId] = useState("");
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
+  // The action reports rather than redirecting, so the clinic day the new visit
+  // joins is invalidated before the page moves on to the visit it opened.
+  const [result, submit, isSubmitting] = useActionState(
+    async (
+      _previous: Awaited<ReturnType<typeof createVisit>> | null,
+      formData: FormData,
+    ) => {
+      const outcome = await createVisit(formData);
 
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleComboChange = (id: string, value: Patient | null) => {
-    setFormData((prev) => ({ ...prev, [id]: value?.id || "" }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch("/api/visits", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to add visit");
+      if (outcome.ok) {
+        await invalidateVisitWrites(queryClient, outcome.data.id);
+        router.push(visitPage(outcome.data.id));
       }
 
-      toast.success("Visit added");
-      router.push(`/visits/${data.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to add visit");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      return outcome;
+    },
+    null,
+  );
+
+  const fieldError = (field: string) =>
+    result && !result.ok && result.error.fieldErrors?.[field]
+      ? result.error.fieldErrors[field][0]
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,25 +62,27 @@ const CheckInPage = () => {
 
       <Card>
         <CardContent>
-          <form className="space-y-12" onSubmit={handleSubmit}>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="patientId" value={patientId} />
+
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
                 <PatientCombobox
-                  defaultValue={selectedPatient}
-                  onSelectChange={(value) =>
-                    value && handleComboChange("patient", value)
+                  defaultValue={null}
+                  onSelectChange={(patient: PatientSummaryDto | null) =>
+                    setPatientId(patient?.id ?? "")
                   }
                 />
+                {fieldError("patientId") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("patientId")}
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="examiner">Examiner</Label>
-                <Input
-                  id="examiner"
-                  placeholder=""
-                  value={formData.examiner}
-                  onChange={handleChange}
-                />
+                <Input id="examiner" placeholder="" disabled />
               </div>
             </div>
 
@@ -108,23 +93,22 @@ const CheckInPage = () => {
                 </Label>
                 <Input
                   id="startDateTime"
+                  name="startDateTime"
                   type="datetime-local"
                   required
-                  value={formData.startDateTime}
-                  onChange={handleChange}
                 />
+                {fieldError("startDateTime") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("startDateTime")}
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="visitType">
                   Type<span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  required
-                  onValueChange={(value) =>
-                    handleSelectChange("visitType", value)
-                  }
-                >
+                <Select name="visitType" required>
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
@@ -137,20 +121,27 @@ const CheckInPage = () => {
                     <SelectItem value="PHARMACY">Pharmacy</SelectItem>
                   </SelectContent>
                 </Select>
+                {fieldError("visitType") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("visitType")}
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-10">
               <div className="grid gap-3">
                 <Label htmlFor="reason">Reason</Label>
-                <Textarea
-                  id="reason"
-                  placeholder=""
-                  value={formData.reason}
-                  onChange={handleChange}
-                />
+                <Textarea id="reason" name="reason" placeholder="" />
+                {fieldError("reason") && (
+                  <p className="text-sm text-red-600">{fieldError("reason")}</p>
+                )}
               </div>
             </div>
+
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
 
             <Button type="submit" className="mt-4" disabled={isSubmitting}>
               {isSubmitting ? "Checking in..." : "Check-in"}

@@ -19,58 +19,49 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  checkInAppointment,
+  deleteAppointment,
+} from "@/app/actions/appointment-actions";
+import {
+  invalidateAppointmentWrites,
+  useAppointmentList,
+} from "@/client/appointments/queries";
 
 const AllAppointmentsPage = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [filteredAppointments, setFilteredAppointments] = useState<
-    PatientAppointment[]
-  >([]);
+  const queryClient = useQueryClient();
+  const { data: appointments, isPending, isError } = useAppointmentList();
+  const [isWriting, startWriting] = useTransition();
 
-  const fetchAppointments = async () => {
-    try {
-      const response = await fetch("/api/appointments");
-      if (!response.ok) {
-        throw new Error("Failed to fetch appointments");
+  const archive = (appointmentId: string) => {
+    if (!confirm("Are you sure you want to delete this appointment?")) return;
+
+    startWriting(async () => {
+      const result = await deleteAppointment(appointmentId);
+
+      if (!result.ok) {
+        toast.error(result.error.message);
+        return;
       }
 
-      const data = await response.json();
-      setFilteredAppointments(data);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to load appointments");
-    } finally {
-      setLoading(false);
-    }
+      await invalidateAppointmentWrites(queryClient, appointmentId);
+      toast.success("Appointment archived");
+    });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this appointment?")) {
-      try {
-        const response = await fetch(`/api/appointments/${id}`, {
-          method: "DELETE",
-        });
+  // A successful check-in navigates to the visit it opened, so only the failure
+  // comes back here.
+  const checkIn = (appointmentId: string) => {
+    startWriting(async () => {
+      const result = await checkInAppointment(appointmentId);
 
-        if (!response.ok) {
-          throw new Error("Failed to delete appointment");
-        }
-
-        setFilteredAppointments((prev) =>
-          prev.filter((appointment) => appointment.id !== id)
-        );
-        toast.success("Appointment deleted");
-      } catch (error) {
-        console.error("Error deleting appointment:", error);
-        toast.error("Failed to delete appointment");
-      }
-    }
+      if (!result.ok) toast.error(result.error.message);
+    });
   };
-
-  useEffect(() => {
-    fetchAppointments();
-  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -86,9 +77,13 @@ const AllAppointmentsPage = () => {
 
       <Card>
         <CardContent>
-          {loading ? (
+          {isPending ? (
             <div className="flex justify-center items-center h-40">
               <p>Loading appointments...</p>
+            </div>
+          ) : isError ? (
+            <div className="flex justify-center items-center h-40">
+              <p className="text-red-600">Failed to load appointments</p>
             </div>
           ) : (
             <Table>
@@ -96,21 +91,21 @@ const AllAppointmentsPage = () => {
                 <TableRow>
                   <TableHead>Full Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Examiner</TableHead>
+                  <TableHead>Provider</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAppointments.length === 0 ? (
+                {appointments?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12">
+                    <TableCell colSpan={6} className="text-center py-12">
                       No appointments found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAppointments.map((appointment) => (
+                  appointments?.map((appointment) => (
                     <TableRow key={appointment.id}>
                       <TableCell>
                         {appointment.patient.firstName}{" "}
@@ -119,13 +114,8 @@ const AllAppointmentsPage = () => {
                       </TableCell>
                       <TableCell>{appointment.appointmentType}</TableCell>
                       <TableCell>
-                        {appointment?.provider &&
-                          appointment?.provider.role === "DOCTOR" && (
-                            <h4 className="text-xl font-semibold">
-                              {appointment.provider.firstName}{" "}
-                              {appointment.provider.lastName}
-                            </h4>
-                          )}
+                        {appointment.provider?.role === "DOCTOR" &&
+                          appointment.provider.name}
                       </TableCell>
                       <TableCell>
                         {formatDateTime(appointment.startDateTime)}
@@ -134,17 +124,29 @@ const AllAppointmentsPage = () => {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              disabled={isWriting}
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
+                              disabled={appointment.checkedIn}
+                              onClick={() => checkIn(appointment.id)}
+                            >
+                              {appointment.checkedIn
+                                ? "Already checked in"
+                                : "Check In"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() =>
-                                router.push(`/visits/${appointment.id}`)
+                                router.push(`/appointments/${appointment.id}`)
                               }
                             >
-                              Check In
+                              View
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
@@ -157,7 +159,7 @@ const AllAppointmentsPage = () => {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600"
-                              onClick={() => handleDelete(appointment.id)}
+                              onClick={() => archive(appointment.id)}
                             >
                               Delete
                             </DropdownMenuItem>

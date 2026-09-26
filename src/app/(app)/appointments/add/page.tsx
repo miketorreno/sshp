@@ -1,4 +1,5 @@
 "use client";
+import { useActionState, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,67 +12,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { createAppointment } from "@/app/actions/appointment-actions";
 import { PatientCombobox } from "@/components/patient-combobox";
+import type { PatientSummaryDto } from "@/server/patients/dto";
 
 const AddAppointmentPage = () => {
-  const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [formData, setFormData] = useState({
-    patient: selectedPatient?.id,
-    examiner: "",
-    startDateTime: "",
-    endDateTime: "",
-    appointmentType: "",
-    appointmentStatus: "SCHEDULED",
-    reason: "",
-  });
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const handleComboChange = (id: string, value: Patient | null) => {
-    setFormData((prev) => ({ ...prev, [id]: value?.id || "" }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch("/api/appointments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to add appointment");
-      }
-
-      toast.success("Appointment added");
-      router.push(`/appointments/all`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to add appointment");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const [patientId, setPatientId] = useState("");
+  const [result, submit, isSubmitting] = useActionState(
+    async (
+      _previous: Awaited<ReturnType<typeof createAppointment>> | null,
+      formData: FormData
+    ) => createAppointment(formData),
+    null
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -81,25 +34,22 @@ const AddAppointmentPage = () => {
 
       <Card>
         <CardContent>
-          <form className="space-y-12" onSubmit={handleSubmit}>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="patientId" value={patientId} />
+
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
                 <PatientCombobox
-                  defaultValue={selectedPatient}
-                  onSelectChange={(value) =>
-                    value && handleComboChange("patient", value)
+                  defaultValue={null}
+                  onSelectChange={(patient: PatientSummaryDto | null) =>
+                    setPatientId(patient?.id ?? "")
                   }
                 />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="examiner">Examiner</Label>
-                <Input
-                  id="examiner"
-                  placeholder=""
-                  value={formData.examiner}
-                  onChange={handleChange}
-                />
+                {result?.ok === false && result.error.fieldErrors?.patientId && (
+                  <p className="text-sm text-red-600">
+                    {result.error.fieldErrors.patientId[0]}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -110,10 +60,9 @@ const AddAppointmentPage = () => {
                 </Label>
                 <Input
                   id="startDateTime"
+                  name="startDateTime"
                   type="datetime-local"
                   required
-                  value={formData.startDateTime}
-                  onChange={handleChange}
                 />
               </div>
 
@@ -123,11 +72,16 @@ const AddAppointmentPage = () => {
                 </Label>
                 <Input
                   id="endDateTime"
+                  name="endDateTime"
                   type="datetime-local"
                   required
-                  value={formData.endDateTime}
-                  onChange={handleChange}
                 />
+                {result?.ok === false &&
+                  result.error.fieldErrors?.endDateTime && (
+                    <p className="text-sm text-red-600">
+                      {result.error.fieldErrors.endDateTime[0]}
+                    </p>
+                  )}
               </div>
             </div>
 
@@ -136,12 +90,7 @@ const AddAppointmentPage = () => {
                 <Label htmlFor="appointmentType">
                   Type<span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  required
-                  onValueChange={(value) =>
-                    handleSelectChange("appointmentType", value)
-                  }
-                >
+                <Select name="appointmentType" required>
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
@@ -159,12 +108,7 @@ const AddAppointmentPage = () => {
 
               <div className="grid gap-3">
                 <Label htmlFor="appointmentStatus">Status</Label>
-                <Select
-                  defaultValue={formData.appointmentStatus}
-                  onValueChange={(value) =>
-                    handleSelectChange("appointmentStatus", value)
-                  }
-                >
+                <Select name="appointmentStatus" defaultValue="SCHEDULED">
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>
@@ -181,14 +125,13 @@ const AddAppointmentPage = () => {
             <div className="grid md:grid-cols-2 gap-10">
               <div className="grid gap-3">
                 <Label htmlFor="reason">Reason</Label>
-                <Textarea
-                  id="reason"
-                  placeholder=""
-                  value={formData.reason}
-                  onChange={handleChange}
-                />
+                <Textarea id="reason" name="reason" placeholder="" />
               </div>
             </div>
+
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
 
             <Button type="submit" className="mt-4" disabled={isSubmitting}>
               {isSubmitting ? "Adding..." : "Add Appointment"}

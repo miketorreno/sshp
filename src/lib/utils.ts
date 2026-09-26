@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function calculateAge(dateOfBirth: Date): number {
+export function calculateAge(dateOfBirth: Date | string): number {
   const today = new Date();
   const dob = new Date(dateOfBirth);
   let age = today.getFullYear() - dob.getFullYear();
@@ -21,7 +21,7 @@ export function calculateAge(dateOfBirth: Date): number {
   return age;
 }
 
-export function formatDate(date: Date) {
+export function formatDate(date: Date | string) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {
     month: "short",
@@ -30,7 +30,7 @@ export function formatDate(date: Date) {
   });
 }
 
-export function formatTime(date: Date) {
+export function formatTime(date: Date | string) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {
     hour: "2-digit",
@@ -39,7 +39,7 @@ export function formatTime(date: Date) {
   });
 }
 
-export function formatDateTime(date: Date) {
+export function formatDateTime(date: Date | string) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {
     month: "short",
@@ -51,7 +51,7 @@ export function formatDateTime(date: Date) {
   });
 }
 
-export const formatFetchedDate = (dateString: string) => {
+export const formatFetchedDate = (dateString: string | Date) => {
   const date = new Date(dateString);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -67,4 +67,17 @@ export const formatFetchedDateTime = (dateString: string) => {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
+/**
+ * The value a `datetime-local` input accepts: the instant's local wall clock,
+ * joined with "T". The browser sends it back the same way, so the form round
+ * trips the time the clinician typed rather than shifting it to UTC.
+ */
+export const formatFetchedLocalDateTime = (date: Date | string) => {
+  const local = new Date(date);
+  const hours = String(local.getHours()).padStart(2, "0");
+  const minutes = String(local.getMinutes()).padStart(2, "0");
+
+  return `${formatFetchedDate(local)}T${hours}:${minutes}`;
 };

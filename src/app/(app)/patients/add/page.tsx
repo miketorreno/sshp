@@ -1,3 +1,5 @@
+"use client";
+import { useActionState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +15,14 @@ import {
 } from "@/components/ui/select";
 
 const AddPatientPage = () => {
+  const [result, submit, isSubmitting] = useActionState(
+    async (
+      _previous: Awaited<ReturnType<typeof createPatient>> | null,
+      formData: FormData
+    ) => createPatient(formData),
+    null
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -21,7 +31,7 @@ const AddPatientPage = () => {
 
       <Card>
         <CardContent>
-          <form action={createPatient} className="space-y-12">
+          <form action={submit} className="space-y-12">
             <div className="grid md:grid-cols-3 gap-8">
               <div className="grid gap-3">
                 <Label htmlFor="firstName">
@@ -192,8 +202,12 @@ const AddPatientPage = () => {
               </div>
             </div>
 
-            <Button type="submit" className="mt-4">
-              Add Patient
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
+
+            <Button type="submit" className="mt-4" disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Add Patient"}
             </Button>
           </form>
         </CardContent>

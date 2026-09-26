@@ -1,8 +1,19 @@
 "use client";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, MoreHorizontal } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { deletePatient } from "@/app/actions/patient-actions";
 import { Button } from "@/components/ui/button";
-import { Search, MoreHorizontal } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -11,32 +22,44 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useRouter } from "next/navigation";
 import { calculateAge } from "@/lib/utils";
-import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
-import { deletePatient } from "@/app/actions/patient-actions";
+import {
+  invalidatePatientWrites,
+  usePatientList,
+  usePatientSearch,
+} from "@/client/patients/queries";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
-async function fetchPatients(): Promise<Patient[]> {
-  const response = await fetch("/api/patients").then((res) => res.json());
-  return response;
-}
+const PATIENT_PAGE_SIZE = 20;
 
 const AllPatientsPage = () => {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [isArchiving, startArchiving] = useTransition();
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { isPending, error, data } = useQuery({
-    queryKey: ["patients"],
-    queryFn: fetchPatients,
-  });
+  const list = usePatientList({ page: 1, limit: PATIENT_PAGE_SIZE });
+  const matches = usePatientSearch(debouncedSearch);
+  const isSearching = debouncedSearch.length > 0;
+  const patientsQuery = isSearching ? matches : list;
+  const patients = patientsQuery.data ?? [];
 
-  if (isPending) {
+  const archivePatient = (patientId: string) => {
+    startArchiving(async () => {
+      const result = await deletePatient(patientId);
+
+      if (!result.ok) {
+        toast.error(result.error.message);
+        return;
+      }
+
+      toast.success("Patient archived");
+      await invalidatePatientWrites(queryClient, patientId);
+    });
+  };
+
+  if (list.isPending) {
     return (
       <div className="flex justify-center items-center h-40">
         <p>Loading patients...</p>
@@ -44,9 +67,7 @@ const AllPatientsPage = () => {
     );
   }
 
-  if (error) {
-    toast.error("Failed to load patients");
-
+  if (patientsQuery.isError) {
     return (
       <div className="flex justify-center items-center h-40">
         <p className="text-red-600">Error loading patients</p>
@@ -59,16 +80,21 @@ const AllPatientsPage = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold my-2">All Patients</h1>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search patients..." className="pl-8" />
-          </div>
+          <Input
+            placeholder="Search patients..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </div>
       </div>
 
       <Card>
         <CardContent>
-          {data?.length === 0 ? (
+          {isSearching && patientsQuery.isFetching ? (
+            <div className="flex justify-center items-center h-40">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : patients.length === 0 ? (
             <div className="flex justify-center items-center h-40">
               <p>No patients found</p>
             </div>
@@ -86,7 +112,7 @@ const AllPatientsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.map((patient: Patient) => (
+                {patients.map((patient) => (
                   <TableRow key={patient.id}>
                     <TableCell>
                       {patient.firstName} {patient.middleName}{" "}
@@ -131,9 +157,8 @@ const AllPatientsPage = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-red-600 cursor-pointer"
-                            onClick={async () =>
-                              await deletePatient(patient.id)
-                            }
+                            disabled={isArchiving}
+                            onClick={() => archivePatient(patient.id)}
                           >
                             Delete
                           </DropdownMenuItem>

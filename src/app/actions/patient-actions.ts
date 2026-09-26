@@ -1,166 +1,93 @@
 "use server";
-import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import z from "zod";
+import {
+  actionFailure,
+  FAILURE_CODES,
+  parseSubmission,
+  type ActionResult,
+} from "@/lib/action-result";
+import { PATIENT_LIST_PAGE } from "@/server/patients/contract";
+import {
+  createPatient as createPatientCommand,
+  deletePatient as deletePatientCommand,
+  updatePatient as updatePatientCommand,
+  type PatientArchiveResult,
+  type PatientWriteResult,
+} from "@/server/patients/commands";
+import {
+  patientInputFromFormData,
+  patientInputSchema,
+} from "@/server/patients/schema";
 
-const PatientSchema = z.object({
-  firstName: z.string().min(2),
-  middleName: z.string().min(2),
-  lastName: z.string().min(2),
-  dateOfBirth: z.string().min(1),
-  gender: z.enum(["Male", "Female", "Other"]),
-  bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]),
-  placeOfBirth: z.string().optional(),
-  occupation: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.email(),
-  address: z.string().optional(),
-  country: z.string().optional(),
-  guardian: z.string().optional(),
-  referredBy: z.string().optional(),
-  referredDate: z.string().optional(),
-});
+/**
+ * Form commands for patients. They own the form contract: parse and validate
+ * the submission, run the command, revalidate the affected page, and redirect
+ * on success. Failures come back as results so the form can show them.
+ */
 
-export type SearchPatientResponse = {
-  patients?: Patient[];
-  error?: string;
-};
+export async function createPatient(
+  formData: FormData,
+): Promise<ActionResult<PatientWriteResult>> {
+  const submission = parsePatientForm(formData);
 
-export async function createPatient(formData: FormData): Promise<void> {
-  const raw = {
-    firstName: formData.get("firstName") as string,
-    middleName: formData.get("middleName") as string,
-    lastName: formData.get("lastName") as string,
-    dateOfBirth: formData.get("dateOfBirth") as string,
-    gender: formData.get("gender") as string,
-    bloodGroup: formData.get("bloodGroup") as string,
-    placeOfBirth: formData.get("placeOfBirth") as string,
-    occupation: formData.get("occupation") as string,
-    phone: formData.get("phone") as string,
-    email: formData.get("email") as string,
-    address: formData.get("address") as string,
-    country: formData.get("country") as string,
-    guardian: formData.get("guardian") as string,
-    referredBy: formData.get("referredBy") as string,
-    referredDate: formData.get("referredDate") as string,
-  };
+  if (!submission.ok) return submission;
 
-  const patient = PatientSchema.safeParse(raw);
+  const result = await createPatientCommand(submission.input);
 
-  if (!patient.success) {
-    throw new Error(patient.error.message);
-  }
+  if (!result.ok) return result;
 
-  const newPatient = await prisma.patient.create({
-    data: {
-      ...patient.data,
-      dateOfBirth: new Date(patient.data.dateOfBirth),
-      referredDate: patient.data.referredDate
-        ? new Date(patient.data.referredDate)
-        : undefined,
-    },
-  });
-
-  revalidatePath("/patients/all");
-  redirect(`/patients/${newPatient.id}`);
+  revalidatePath(PATIENT_LIST_PAGE);
+  redirect(patientPage(result.data.id));
 }
 
-export async function updatePatient(formData: FormData): Promise<void> {
-  const patientId = formData.get("id") as string;
-  const raw = {
-    firstName: formData.get("firstName") as string,
-    middleName: formData.get("middleName") as string,
-    lastName: formData.get("lastName") as string,
-    dateOfBirth: formData.get("dateOfBirth") as string,
-    gender: formData.get("gender") as string,
-    bloodGroup: formData.get("bloodGroup") as string,
-    placeOfBirth: formData.get("placeOfBirth") as string,
-    occupation: formData.get("occupation") as string,
-    phone: formData.get("phone") as string,
-    email: formData.get("email") as string,
-    address: formData.get("address") as string,
-    country: formData.get("country") as string,
-    guardian: formData.get("guardian") as string,
-    referredBy: formData.get("referredBy") as string,
-    referredDate: formData.get("referredDate") as string,
-  };
+export async function updatePatient(
+  formData: FormData,
+): Promise<ActionResult<PatientWriteResult>> {
+  const patientId = formData.get("id");
 
-  const patient = PatientSchema.safeParse(raw);
-
-  if (!patient.success) {
-    throw new Error(patient.error.message);
+  if (typeof patientId !== "string" || !patientId) {
+    return actionFailure(FAILURE_CODES.INVALID_INPUT, {
+      fieldErrors: { id: ["Select a patient to update"] },
+    });
   }
 
-  const updatedPatient = await prisma.patient.update({
-    where: { id: patientId },
-    data: {
-      ...patient.data,
-      dateOfBirth: new Date(patient.data.dateOfBirth),
-      referredDate: patient.data.referredDate
-        ? new Date(patient.data.referredDate)
-        : undefined,
-    },
-  });
+  const submission = parsePatientForm(formData);
 
-  revalidatePath("/patients/all");
-  redirect(`/patients/${updatedPatient.id}`);
-}
+  if (!submission.ok) return submission;
 
-export async function getPatient(patientId: string) {
-  const patient = await prisma.patient.findUnique({
-    where: { id: patientId },
-  });
+  const result = await updatePatientCommand(patientId, submission.input);
 
-  if (!patient) {
-    return { error: "Patient not found" };
-  }
+  if (!result.ok) return result;
 
-  return patient;
-}
-
-export async function deletePatient(patientId: string) {
-  const existingPatient = await prisma.patient.findUnique({
-    where: { id: patientId },
-  });
-
-  if (!existingPatient) {
-    return { error: "Patient not found" };
-  }
-
-  await prisma.patient.delete({
-    where: { id: patientId },
-  });
-
-  revalidatePath("/patients/all");
-  redirect("/patients/all");
+  revalidatePath(PATIENT_LIST_PAGE);
+  redirect(patientPage(result.data.id));
 }
 
 /**
- * @param query The search string provided by the patient.
- * @returns A promise that resolves to a SearchPatientResponse object.
+ * Archiving is not a form submission, so it reports instead of redirecting: the
+ * caller stays where it is and invalidates the reads the archive changed.
  */
-export async function searchPatients(
-  query: string
-): Promise<SearchPatientResponse> {
-  if (!query) {
-    return { patients: [] };
-  }
+export async function deletePatient(
+  patientId: string,
+): Promise<ActionResult<PatientArchiveResult>> {
+  const result = await deletePatientCommand(patientId);
 
-  try {
-    const patients = await prisma.patient.findMany({
-      where: {
-        email: {
-          contains: query,
-          mode: "insensitive",
-        },
-      },
-      take: 10,
-    });
+  if (!result.ok) return result;
 
-    return { patients };
-  } catch (err) {
-    console.error("Database search failed:", err);
-    return { error: "Failed to search for patients. Please try again." };
-  }
+  revalidatePath(PATIENT_LIST_PAGE);
+
+  return result;
+}
+
+/** Parses a patient submission, or returns the failure the form should show. */
+function parsePatientForm(formData: FormData) {
+  return parseSubmission(
+    patientInputSchema,
+    patientInputFromFormData(formData),
+  );
+}
+
+function patientPage(patientId: string) {
+  return `/patients/${patientId}`;
 }
