@@ -18,6 +18,8 @@ Existing delete operations will archive records by setting their existing `delet
 - Lab, imaging, and medication “Delete” archives the order. It does not translate the order into `CANCELLED`.
 - Restore/undelete is not part of this migration.
 
+The deferrals named in these rules — role permissions, restore/undelete, and the `Delete` label terminology among them — are recorded once, in the deferred-scope table in ADR 0001, with the backlog issue that owns each.
+
 The existing schema already provides `deletedAt` on the affected domain models, so this decision does not require a field-adding migration. Read filters and relationship-aware lookups still need to be applied consistently. A child cannot be treated as active merely because its own row is active if any ancestor record is archived.
 
 ## Consequence
