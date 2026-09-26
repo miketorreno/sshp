@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { endOfDay, startOfDay } from "@/lib/clinic-day";
 import { requireSession } from "@/lib/session";
 import {
@@ -76,7 +76,7 @@ export async function listVisits(
 ): Promise<VisitSummaryDto[]> {
   await requireSession();
 
-  const visits = await prisma.visit.findMany({
+  const visits = await getPrisma().visit.findMany({
     where: {
       ...ACTIVE_VISIT,
       ...startDateTimeWindow(query),
@@ -96,7 +96,7 @@ export async function getVisitDetail(
 ): Promise<VisitDetailDto | null> {
   await requireSession();
 
-  const visit = await prisma.visit.findFirst({
+  const visit = await getPrisma().visit.findFirst({
     where: { id, ...ACTIVE_VISIT },
     include: VISIT_DETAIL_RELATIONS,
   });

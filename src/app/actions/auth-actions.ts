@@ -2,7 +2,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isAPIError } from "better-auth/api";
-import { auth } from "@/lib/auth";
+import { getAuth } from "@/lib/auth";
 import {
   actionFailure,
   FAILURE_CODES,
@@ -10,6 +10,7 @@ import {
   type ActionFailureResult,
 } from "@/lib/action-result";
 import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { MissingRuntimeConfigError } from "@/lib/runtime-env";
 
 /**
  * The authentication exception to the domain rule that every command needs a
@@ -51,7 +52,7 @@ export async function signUp(
   password: string
 ): Promise<ActionFailureResult> {
   try {
-    await auth.api.signUpEmail({
+    await getAuth().api.signUpEmail({
       body: { name, email, password, callbackURL: CLINIC_HOME },
     });
   } catch (error) {
@@ -66,7 +67,7 @@ export async function signIn(
   password: string
 ): Promise<ActionFailureResult> {
   try {
-    await auth.api.signInEmail({
+    await getAuth().api.signInEmail({
       body: { email, password, callbackURL: CLINIC_HOME },
     });
   } catch (error) {
@@ -88,7 +89,7 @@ export async function signOut(): Promise<ActionFailureResult> {
   if (!session) return unauthenticatedFailure();
 
   try {
-    await auth.api.signOut({ headers: await headers() });
+    await getAuth().api.signOut({ headers: await headers() });
   } catch (error) {
     console.error("Sign out failed:", error);
 
@@ -141,6 +142,14 @@ function refusalOrUnexpected(
   }
 
   console.error(`${command} failed:`, error);
+
+  // A deployment missing a runtime variable is not something the clinician can
+  // fix by trying again, and a form that says only "something went wrong" sends
+  // the operator to the log instead of to the variable. The message names
+  // variables and never their values, so it is safe to report as it stands.
+  if (error instanceof MissingRuntimeConfigError) {
+    return actionFailure(FAILURE_CODES.FAILURE, { message: error.message });
+  }
 
   return internalFailure();
 }

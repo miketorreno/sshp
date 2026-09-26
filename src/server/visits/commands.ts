@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -57,7 +57,7 @@ export async function createVisit(
     return knownFailure(VISIT_PATIENT_NOT_FOUND);
 
   try {
-    const created = await prisma.visit.create({
+    const created = await getPrisma().visit.create({
       data: {
         patientId: input.patientId,
         providerId: session.user.id,
@@ -87,7 +87,7 @@ export async function updateVisit(
   if (visit.endDateTime) return knownFailure(VISIT_CHECKED_OUT);
 
   try {
-    const updated = await prisma.visit.update({
+    const updated = await getPrisma().visit.update({
       where: { id: visit.id },
       data: {
         visitType: input.visitType,
@@ -119,7 +119,7 @@ export async function checkoutVisit(
   if (visit.endDateTime) return knownFailure(VISIT_ALREADY_CHECKED_OUT);
 
   try {
-    const checkedOut = await prisma.visit.update({
+    const checkedOut = await getPrisma().visit.update({
       where: { id: visit.id },
       data: { endDateTime: new Date(), updatedById: session.user.id },
     });
@@ -141,7 +141,7 @@ export async function deleteVisit(
   if (!session) return unauthenticatedFailure();
 
   try {
-    const visit = await prisma.visit.findFirst({
+    const visit = await getPrisma().visit.findFirst({
       where: { id: visitId, patient: { deletedAt: null } },
       select: { id: true, deletedAt: true, endDateTime: true },
     });
@@ -161,7 +161,7 @@ export async function deleteVisit(
     }
 
     const archivedAt = new Date();
-    await prisma.visit.update({
+    await getPrisma().visit.update({
       where: { id: visit.id },
       data: { deletedAt: archivedAt, updatedById: session.user.id },
     });
@@ -177,14 +177,14 @@ export async function deleteVisit(
 
 /** The active visit the path addressed, or null when it is not one. */
 async function findActiveVisit(visitId: string) {
-  return prisma.visit.findFirst({
+  return getPrisma().visit.findFirst({
     where: { id: visitId, ...ACTIVE_VISIT },
     select: { id: true, endDateTime: true },
   });
 }
 
 async function isActivePatient(patientId: string): Promise<boolean> {
-  const patient = await prisma.patient.findFirst({
+  const patient = await getPrisma().patient.findFirst({
     where: { id: patientId, deletedAt: null },
     select: { id: true },
   });

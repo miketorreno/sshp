@@ -7,9 +7,9 @@ const { handler } = vi.hoisted(() => ({ handler: vi.fn() }));
 // This suite reads the shape of the API, not what it serves, so the routes get
 // an inert database behind them and no request is ever made.
 vi.mock("@/lib/auth", () => ({
-  auth: { handler, api: { getSession: vi.fn() } },
+  getAuth: () => ({ handler, api: { getSession: vi.fn() } }),
 }));
-vi.mock("@/lib/prisma", () => ({ default: {} }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => {} }));
 
 import * as appointmentRoute from "@/app/api/appointments/route";
 import * as appointmentDetailRoute from "@/app/api/appointments/[id]/route";

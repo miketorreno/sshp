@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -57,7 +57,7 @@ export async function recordVitals(
   if (visit.endDateTime) return knownFailure(VISIT_CHECKED_OUT);
 
   try {
-    const created = await prisma.vitals.create({
+    const created = await getPrisma().vitals.create({
       data: {
         visitId: input.visitId,
         recordedById: session.user.id,
@@ -95,7 +95,7 @@ export async function deleteVitals(
   try {
     // The visit in the path owns the lookup, so vitals recorded during another
     // visit are not reachable through this one.
-    const vitals = await prisma.vitals.findFirst({
+    const vitals = await getPrisma().vitals.findFirst({
       where: { id: vitalsId, visitId },
       select: { id: true, deletedAt: true },
     });
@@ -115,7 +115,7 @@ export async function deleteVitals(
     }
 
     const archivedAt = new Date();
-    await prisma.vitals.update({
+    await getPrisma().vitals.update({
       where: { id: vitals.id },
       data: { deletedAt: archivedAt },
     });
@@ -130,7 +130,7 @@ export async function deleteVitals(
 }
 
 async function findActiveVisit(visitId: string) {
-  return prisma.visit.findFirst({
+  return getPrisma().visit.findFirst({
     where: { id: visitId, ...ACTIVE_VISIT },
     select: { id: true, endDateTime: true },
   });

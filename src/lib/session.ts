@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { getAuth, type Auth } from "@/lib/auth";
 import {
   FAILURE_CODES,
   FAILURE_MESSAGES,
@@ -9,16 +9,16 @@ import {
 } from "@/lib/action-result";
 
 /**
- * The authentication boundary for every domain read and write. Sessions come
- * from the Better Auth cookie adapter (`nextCookies()`), so the same session
- * cookies work inside route handlers and server actions.
+ * The authentication boundary for every domain read and write. A session is read
+ * from the request's cookies, so the same session works inside route handlers
+ * and server actions.
  *
  * Role permissions are deliberately not modelled here: session presence is the
  * only authorization rule until a role matrix is decided.
  */
 
 export type Session = NonNullable<
-  Awaited<ReturnType<typeof auth.api.getSession>>
+  Awaited<ReturnType<Auth["api"]["getSession"]>>
 >;
 
 /**
@@ -42,8 +42,16 @@ export class UnauthenticatedError extends Error {
   }
 }
 
+/**
+ * The request's headers are read before the auth system is asked for, because
+ * there is no session to read without them: a request the framework refuses to
+ * serve because it has no request scope is a request that must not reach for a
+ * database, and a build collecting page data is exactly such a request.
+ */
 export async function getSession(): Promise<Session | null> {
-  return auth.api.getSession({ headers: await headers() });
+  const requestHeaders = await headers();
+
+  return getAuth().api.getSession({ headers: requestHeaders });
 }
 
 export async function requireSession(): Promise<Session> {

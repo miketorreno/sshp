@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import {
   DEFAULT_LIST_LIMIT,
@@ -31,7 +31,7 @@ export async function listPatients(
   const page = Math.max(1, Math.trunc(query.page ?? 1));
   const limit = clamp(query.limit);
 
-  const patients = await prisma.patient.findMany({
+  const patients = await getPrisma().patient.findMany({
     where: ACTIVE_PATIENT,
     orderBy: { createdAt: "desc" },
     skip: (page - 1) * limit,
@@ -50,7 +50,7 @@ export async function searchPatients(
 
   if (!term) return [];
 
-  const patients = await prisma.patient.findMany({
+  const patients = await getPrisma().patient.findMany({
     where: {
       ...ACTIVE_PATIENT,
       OR: [
@@ -71,7 +71,7 @@ export async function searchPatients(
 export async function listAdmittedPatients(): Promise<AdmittedPatientDto[]> {
   await requireSession();
 
-  const patients = await prisma.patient.findMany({
+  const patients = await getPrisma().patient.findMany({
     where: { ...ACTIVE_PATIENT, patientType: "INPATIENT" },
     orderBy: { createdAt: "desc" },
   });
@@ -85,7 +85,7 @@ export async function getPatientDetail(
 ): Promise<PatientDetailDto | null> {
   await requireSession();
 
-  const patient = await prisma.patient.findFirst({
+  const patient = await getPrisma().patient.findFirst({
     where: { id, ...ACTIVE_PATIENT },
   });
 

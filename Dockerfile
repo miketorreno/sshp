@@ -12,6 +12,11 @@ RUN npm ci
 ###########
 # build   #
 ###########
+# No DATABASE_URL, no BETTER_AUTH_SECRET: these are runtime variables, and the
+# app reads none of them while building (ADR 0003). `.dockerignore` keeps `.env*`
+# out of the context, so a missing variable here is the design working, not a
+# mistake to fix. A build that needs a secret is a build that has reintroduced a
+# runtime dependency.
 FROM node:24-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -18,7 +18,7 @@ const { getSession, signInEmail, signOut, signUpEmail, redirect } = vi.hoisted(
 );
 
 vi.mock("@/lib/auth", () => ({
-  auth: { api: { getSession, signInEmail, signOut, signUpEmail } },
+  getAuth: () => ({ api: { getSession, signInEmail, signOut, signUpEmail } }),
 }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "better-auth.session=abc" }),

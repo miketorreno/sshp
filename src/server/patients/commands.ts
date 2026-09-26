@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -48,7 +48,7 @@ export async function createPatient(
   if (await emailIsTaken(input.email)) return knownFailure(PATIENT_EMAIL_TAKEN);
 
   try {
-    const created = await prisma.patient.create({ data: input });
+    const created = await getPrisma().patient.create({ data: input });
 
     return actionSuccess({ id: created.id });
   } catch (error) {
@@ -63,7 +63,7 @@ export async function updatePatient(
   const session = await getSession();
   if (!session) return unauthenticatedFailure();
 
-  const patient = await prisma.patient.findFirst({
+  const patient = await getPrisma().patient.findFirst({
     where: { id: patientId, deletedAt: null },
   });
 
@@ -73,7 +73,7 @@ export async function updatePatient(
     return knownFailure(PATIENT_EMAIL_TAKEN);
 
   try {
-    const updated = await prisma.patient.update({
+    const updated = await getPrisma().patient.update({
       where: { id: patient.id },
       data: input,
     });
@@ -95,7 +95,7 @@ export async function deletePatient(
   if (!session) return unauthenticatedFailure();
 
   try {
-    const patient = await prisma.patient.findFirst({
+    const patient = await getPrisma().patient.findFirst({
       where: { id: patientId },
       select: { id: true, deletedAt: true },
     });
@@ -110,7 +110,7 @@ export async function deletePatient(
     }
 
     const archivedAt = new Date();
-    await prisma.patient.update({
+    await getPrisma().patient.update({
       where: { id: patient.id },
       data: { deletedAt: archivedAt },
     });
@@ -123,7 +123,7 @@ export async function deletePatient(
 
 /** Archived patients keep their email, so an identity is never reused. */
 async function emailIsTaken(email: string, exceptPatientId?: string) {
-  const owner = await prisma.patient.findFirst({
+  const owner = await getPrisma().patient.findFirst({
     where: { email },
     select: { id: true },
   });

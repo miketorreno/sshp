@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import {
   DEFAULT_LIST_LIMIT,
@@ -37,7 +37,7 @@ export async function listAppointments(
   const page = Math.max(1, Math.trunc(query.page ?? 1));
   const limit = clamp(query.limit);
 
-  const appointments = await prisma.appointment.findMany({
+  const appointments = await getPrisma().appointment.findMany({
     where: ACTIVE_APPOINTMENT,
     include: APPOINTMENT_RELATIONS,
     orderBy: { startDateTime: "asc" },
@@ -60,7 +60,7 @@ export async function getAppointmentDetail(
 ): Promise<AppointmentDetailDto | null> {
   await requireSession();
 
-  const appointment = await prisma.appointment.findFirst({
+  const appointment = await getPrisma().appointment.findFirst({
     where: { id, ...ACTIVE_APPOINTMENT },
     include: APPOINTMENT_RELATIONS,
   });
@@ -84,7 +84,7 @@ async function checkedInAppointmentIds(
 ): Promise<Set<string>> {
   if (appointmentIds.length === 0) return new Set();
 
-  const visits = await prisma.visit.findMany({
+  const visits = await getPrisma().visit.findMany({
     where: { appointmentId: { in: appointmentIds } },
     select: { appointmentId: true },
   });
@@ -95,7 +95,7 @@ async function checkedInAppointmentIds(
 }
 
 async function isCheckedIn(appointmentId: string): Promise<boolean> {
-  const visit = await prisma.visit.findFirst({
+  const visit = await getPrisma().visit.findFirst({
     where: { appointmentId },
     select: { id: true },
   });

@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -60,7 +60,7 @@ export async function requestLabOrder(
   visitId: string,
   input: LabOrderInput,
 ): Promise<ActionResult<OrderWriteResult>> {
-  return requestOrder(visitId, prisma.labOrder, input);
+  return requestOrder(visitId, getPrisma().labOrder, input);
 }
 
 export async function archiveLabOrder(
@@ -70,14 +70,14 @@ export async function archiveLabOrder(
   const session = await getSession();
   if (!session) return unauthenticatedFailure();
 
-  return archiveOrder(visitId, prisma.labOrder, orderId, LAB_ORDER_NOT_FOUND);
+  return archiveOrder(visitId, getPrisma().labOrder, orderId, LAB_ORDER_NOT_FOUND);
 }
 
 export async function requestImagingOrder(
   visitId: string,
   input: ImagingOrderInput,
 ): Promise<ActionResult<OrderWriteResult>> {
-  return requestOrder(visitId, prisma.imagingOrder, input);
+  return requestOrder(visitId, getPrisma().imagingOrder, input);
 }
 
 export async function archiveImagingOrder(
@@ -89,7 +89,7 @@ export async function archiveImagingOrder(
 
   return archiveOrder(
     visitId,
-    prisma.imagingOrder,
+    getPrisma().imagingOrder,
     orderId,
     IMAGING_ORDER_NOT_FOUND,
   );
@@ -99,7 +99,7 @@ export async function requestMedicationOrder(
   visitId: string,
   input: MedicationOrderInput,
 ): Promise<ActionResult<OrderWriteResult>> {
-  return requestOrder(visitId, prisma.medicationOrder, input, onTheList);
+  return requestOrder(visitId, getPrisma().medicationOrder, input, onTheList);
 }
 
 export async function archiveMedicationOrder(
@@ -111,7 +111,7 @@ export async function archiveMedicationOrder(
 
   return archiveOrder(
     visitId,
-    prisma.medicationOrder,
+    getPrisma().medicationOrder,
     orderId,
     MEDICATION_ORDER_NOT_FOUND,
   );
@@ -223,7 +223,7 @@ type OrderRequestTable<Fields> = {
 };
 
 async function findActiveVisit(visitId: string) {
-  return prisma.visit.findFirst({
+  return getPrisma().visit.findFirst({
     where: { id: visitId, ...ACTIVE_VISIT },
     select: { id: true, endDateTime: true },
   });
@@ -231,7 +231,7 @@ async function findActiveVisit(visitId: string) {
 
 /** A medication order names a medication the pharmacy's catalogue still holds. */
 async function isCatalogueMedication(medicationId: string): Promise<boolean> {
-  const medication = await prisma.medication.findFirst({
+  const medication = await getPrisma().medication.findFirst({
     where: { id: medicationId, deletedAt: null },
     select: { id: true },
   });

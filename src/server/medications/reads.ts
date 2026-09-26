@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { toMedicationSummary, type MedicationSummaryDto } from "./dto";
 
@@ -11,7 +11,7 @@ import { toMedicationSummary, type MedicationSummaryDto } from "./dto";
 export async function listMedications(): Promise<MedicationSummaryDto[]> {
   await requireSession();
 
-  const medications = await prisma.medication.findMany({
+  const medications = await getPrisma().medication.findMany({
     where: { deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, brandName: true },

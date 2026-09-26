@@ -11,12 +11,14 @@ The app will use authenticated GET route handlers for browser reads and authenti
 > Amended 2026-09-26 by the order slice: `/api/medications` and `medications:list` are added, because a medication request names a medication from the pharmacy's catalogue. The catalogue is read-only from the browser, so it adds a read and no write method.
 >
 > Amended 2026-09-26 at the end of the migration: the deferred-scope table below records which backlog issue owns each behaviour this decision left alone, and the pre-migration ambient domain interfaces are deleted.
+>
+> Amended 2026-09-26 by ADR-0003: the `/api/auth/[...all]` handler below is no longer unchanged — it now builds the auth system on first request rather than at import, which is the only way to keep it out of the build. Its path, methods, and public/unauthenticated split are unchanged. ADR-0003 also carves an exception out of the test seams below: proving a module builds nothing while being imported means mocking the client, so `src/lib/prisma.test.ts` and `src/lib/auth.test.ts` stand in for Prisma and Better Auth.
 
 ## Boundaries
 
 - `/api/*` is an internal browser contract, not a public API; existing paths remain and no versioned API is introduced.
 - Every domain GET, and every domain action other than the public sign-up and sign-in, requires `auth.api.getSession`. The app layout is not the boundary. The Better Auth `nextCookies()` plug remains the cookie session adapter, so the existing session cookies keep working inside actions and route handlers.
-- Better Auth's `/api/auth/[...all]` handler remains unchanged. Sign-up and sign-in stay public; sign-out requires a session and redirects on success.
+- Better Auth's `/api/auth/[...all]` handler keeps its path, methods, and public sign-up/sign-in split. As of ADR-0003 it builds the auth system on first request rather than at import. Sign-up and sign-in stay public; sign-out requires a session and redirects on success.
 - Role permissions and a role matrix are deferred (#30). Session presence is the only authorization rule in this migration; the existing role-aware UI is unchanged.
 - Session user IDs populate existing `createdById`, `recordedById`, and `orderedById` fields where the model supports them.
 

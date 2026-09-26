@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -56,7 +56,7 @@ export async function createAppointment(
     return knownFailure(APPOINTMENT_PATIENT_NOT_FOUND);
 
   try {
-    const created = await prisma.appointment.create({
+    const created = await getPrisma().appointment.create({
       data: {
         patientId: input.patientId,
         providerId: session.user.id,
@@ -86,7 +86,7 @@ export async function updateAppointment(
   if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
 
   try {
-    const updated = await prisma.appointment.update({
+    const updated = await getPrisma().appointment.update({
       where: { id: appointment.id },
       data: {
         startDateTime: input.startDateTime,
@@ -115,7 +115,7 @@ export async function deleteAppointment(
   if (!session) return unauthenticatedFailure();
 
   try {
-    const appointment = await prisma.appointment.findFirst({
+    const appointment = await getPrisma().appointment.findFirst({
       where: { id: appointmentId },
       select: { id: true, deletedAt: true },
     });
@@ -130,7 +130,7 @@ export async function deleteAppointment(
     }
 
     const archivedAt = new Date();
-    await prisma.appointment.update({
+    await getPrisma().appointment.update({
       where: { id: appointment.id },
       data: { deletedAt: archivedAt },
     });
@@ -163,7 +163,7 @@ export async function checkInAppointment(
   if (!session) return unauthenticatedFailure();
 
   try {
-    const appointment = await prisma.appointment.findFirst({
+    const appointment = await getPrisma().appointment.findFirst({
       where: { id: appointmentId, ...ACTIVE_APPOINTMENT },
       select: {
         id: true,
@@ -177,14 +177,14 @@ export async function checkInAppointment(
 
     if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
 
-    const alreadyCheckedIn = await prisma.visit.findFirst({
+    const alreadyCheckedIn = await getPrisma().visit.findFirst({
       where: { appointmentId: appointment.id },
       select: { id: true },
     });
 
     if (alreadyCheckedIn) return knownFailure(APPOINTMENT_ALREADY_CHECKED_IN);
 
-    const visit = await prisma.$transaction(async (tx) => {
+    const visit = await getPrisma().$transaction(async (tx) => {
       const opened = await tx.visit.create({
         data: {
           patientId: appointment.patientId,
@@ -213,14 +213,14 @@ export async function checkInAppointment(
 
 /** The active appointment the path addressed, or null when it is not usable. */
 async function findActiveAppointment(appointmentId: string) {
-  return prisma.appointment.findFirst({
+  return getPrisma().appointment.findFirst({
     where: { id: appointmentId, ...ACTIVE_APPOINTMENT },
     select: { id: true, patientId: true, startDateTime: true },
   });
 }
 
 async function isActivePatient(patientId: string): Promise<boolean> {
-  const patient = await prisma.patient.findFirst({
+  const patient = await getPrisma().patient.findFirst({
     where: { id: patientId, deletedAt: null },
     select: { id: true },
   });
