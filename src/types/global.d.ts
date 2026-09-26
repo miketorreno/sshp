@@ -70,38 +70,6 @@ interface PatientVisit {
   procedures: Procedure[];
 }
 
-interface Appointment {
-  id: string;
-  patientId: string;
-  providerId: string | null;
-  appointmentId: string | null;
-  startDateTime: Datetime;
-  endDateTime: Datetime;
-  appointmentType: string;
-  appointmentStatus: string;
-  reason: string | null;
-  createdAt: Datetime;
-  updatedAt: Datetime;
-  deletedAt: Datetime | null;
-}
-
-interface PatientAppointment {
-  id: string;
-  patientId: string;
-  providerId: string | null;
-  appointmentId: string | null;
-  startDateTime: Datetime;
-  endDateTime: Datetime;
-  appointmentType: string;
-  appointmentStatus: string;
-  reason: string | null;
-  createdAt: Datetime;
-  updatedAt: Datetime;
-  deletedAt: Datetime | null;
-  patient: Patient;
-  provider: User;
-}
-
 interface ImagingOrder {
   id: string;
   visitId: string;

@@ -1,3 +1,4 @@
+import type { AppointmentListQuery } from "@/server/appointments/contract";
 import type { PatientListQuery } from "@/server/patients/contract";
 
 /**
@@ -15,5 +16,12 @@ export const queryKeys = {
     admitted: () => ["patients", "admitted"] as const,
     search: (query: string) => ["patients", "search", query] as const,
     searches: () => ["patients", "search"] as const,
+  },
+  appointments: {
+    list: (query: AppointmentListQuery = {}) =>
+      ["appointments", "list", query] as const,
+    lists: () => ["appointments", "list"] as const,
+    detail: (appointmentId: string) =>
+      ["appointments", "detail", appointmentId] as const,
   },
 } as const;
