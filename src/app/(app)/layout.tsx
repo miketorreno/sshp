@@ -1,26 +1,32 @@
-"use server";
 import { AppSidebar } from "@/components/app-sidebar";
 import Header from "@/components/header";
+import QueryProvider from "@/components/QueryProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { getSession, type SessionUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 
 const AppLayout = async ({ children }: { children: React.ReactNode }) => {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await getSession();
 
   if (!session) redirect("/login");
 
+  const { name, email, image }: SessionUser = session.user;
+
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar user={{ name, email, image }} />
       <SidebarInset>
         <Header />
-        {/* <pre>{JSON.stringify(session, null, 2)}</pre> */}
-        {/* <pre>{JSON.stringify(session.user)}</pre> */}
-        <div className="p-6 min-h-10/12">{children}</div>
+        {/*
+         * The read cache is scoped to the session entitled to it, which is why it
+         * is mounted here and not in the root layout: signing out unmounts it, so
+         * the next clinician to use this terminal reads nothing from the last
+         * one's cache. Keyed on the session id for the same reason, since a
+         * replaced session is a new identity rather than a re-render.
+         */}
+        <QueryProvider key={session.session.id}>
+          <div className="p-6 min-h-10/12">{children}</div>
+        </QueryProvider>
       </SidebarInset>
     </SidebarProvider>
   );

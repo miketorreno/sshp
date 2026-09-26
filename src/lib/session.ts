@@ -21,6 +21,13 @@ export type Session = NonNullable<
   Awaited<ReturnType<typeof auth.api.getSession>>
 >;
 
+/**
+ * How a client control names the signed-in clinician, and no more of the account
+ * than it needs to. A server component that passes the user to a client control
+ * narrows the session to this.
+ */
+export type SessionUser = Pick<Session["user"], "name" | "email" | "image">;
+
 export const UNAUTHENTICATED_FAILURE: ActionFailure = {
   code: FAILURE_CODES.UNAUTHENTICATED,
   message: FAILURE_MESSAGES.UNAUTHENTICATED,
