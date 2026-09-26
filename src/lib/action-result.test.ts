@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   FAILURE_CODES,
   FAILURE_MESSAGES,
   actionFailure,
   actionSuccess,
+  fieldErrorsFrom,
   knownFailure,
+  parseSubmission,
   statusForFailure,
 } from "@/lib/action-result";
 
@@ -48,7 +51,7 @@ describe("action results", () => {
 
   it("keeps the code stable when a resource supplies its own message", () => {
     expect(
-      actionFailure(FAILURE_CODES.NOT_FOUND, { message: "Patient not found" })
+      actionFailure(FAILURE_CODES.NOT_FOUND, { message: "Patient not found" }),
     ).toEqual({
       ok: false,
       error: { code: "NOT_FOUND", message: "Patient not found" },
@@ -64,6 +67,38 @@ describe("action results", () => {
     expect(knownFailure(patientNotFound)).toEqual({
       ok: false,
       error: patientNotFound,
+    });
+  });
+
+  it("turns a schema's rejections into one message per field", () => {
+    const schema = z.object({
+      email: z.string().email("Enter a valid email address"),
+      age: z.number({ error: "Enter a number" }),
+    });
+
+    const parsed = schema.safeParse({ email: "nope", age: "" });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.success ? null : fieldErrorsFrom(parsed.error)).toEqual({
+      email: ["Enter a valid email address"],
+      age: ["Enter a number"],
+    });
+  });
+
+  it("parses a submission, or reports the invalid input the form should show", () => {
+    const schema = z.object({ email: z.string().min(1, "Enter an email") });
+
+    expect(parseSubmission(schema, { email: "a@b.test" })).toEqual({
+      ok: true,
+      input: { email: "a@b.test" },
+    });
+    expect(parseSubmission(schema, { email: "" })).toEqual({
+      ok: false,
+      error: {
+        code: FAILURE_CODES.INVALID_INPUT,
+        message: FAILURE_MESSAGES.INVALID_INPUT,
+        fieldErrors: { email: ["Enter an email"] },
+      },
     });
   });
 });

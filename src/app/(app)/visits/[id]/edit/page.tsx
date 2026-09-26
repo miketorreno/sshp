@@ -9,207 +9,170 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatFetchedDateTime } from "@/lib/utils";
+import { formatFetchedLocalDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { use, useActionState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { updateVisit } from "@/app/actions/visit-actions";
+import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
+import { visitPage } from "@/server/visits/contract";
 
+type VisitActionState = Awaited<ReturnType<typeof updateVisit>> | null;
+
+/**
+ * Editing a visit changes how the visit reads, never who it is for: the patient
+ * and the provider are shown rather than offered as choices. A checked-out visit
+ * is history, so it has nothing to edit.
+ */
 const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<PatientVisit>();
-  const [patientVisit, setPatientVisit] = useState<PatientVisit>();
-  const [startDateTimeValue, setStartDateTimeValue] = useState("");
+  const queryClient = useQueryClient();
+  const { id } = use(params);
+  const { data: visit, isPending, isError } = useVisitDetail(id);
 
-  const fetchVisit = async () => {
-    const { id } = await params;
+  // The action reports rather than redirecting, so the reads the edit changed are
+  // invalidated before the page moves on to the visit it edited.
+  const [result, submit, isSubmitting] = useActionState(
+    async (_previous: VisitActionState, formData: FormData) => {
+      const outcome = await updateVisit(formData);
 
-    try {
-      const response = await fetch(`/api/visits/${id}`);
-
-      if (response.status === 404) {
-        throw new Error("Visit not found");
+      if (outcome.ok) {
+        await invalidateVisitWrites(queryClient, id);
+        router.push(visitPage(id));
       }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch visit");
-      }
+      return outcome;
+    },
+    null,
+  );
 
-      const data = await response.json();
-      setPatientVisit(data);
-      setFormData(data);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Failed to load visit");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading visit...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    fetchVisit();
-  }, []);
+  if (isError || !visit) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Visit not found</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    if (patientVisit) {
-      setStartDateTimeValue(formatFetchedDateTime(patientVisit.startDateTime));
-    }
-  }, [patientVisit]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(`/api/visits/${patientVisit?.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update visit");
-      }
-
-      toast.success("Visit updated");
-      router.push(`/visits/${data.id}`);
-    } catch (error) {
-      console.error("Error: ", error);
-      toast.error("Failed to update visit");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const fieldError = (field: string) =>
+    result && !result.ok && result.error.fieldErrors?.[field]
+      ? result.error.fieldErrors[field][0]
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold my-2">Visit Info</h1>
+        <h1 className="text-2xl font-bold my-2">Edit Visit</h1>
       </div>
 
       <Card className="mb-8">
         <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center h-40">
-              <p>Loading visit...</p>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="id" value={visit.id} />
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="patient">Patient</Label>
+                <Input
+                  id="patient"
+                  value={`${visit.patient.firstName} ${visit.patient.middleName} ${visit.patient.lastName}`}
+                  disabled
+                />
+              </div>
+
+              <div className="grid gap-3">
+                <Label htmlFor="provider">Provider</Label>
+                <Input
+                  id="provider"
+                  value={visit.provider ? visit.provider.name : "Unassigned"}
+                  disabled
+                />
+              </div>
             </div>
-          ) : (
-            <form className="space-y-12" onSubmit={handleSubmit}>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="patient">
-                    Patient<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="patient"
-                    placeholder=""
-                    value={
-                      formData?.patient
-                        ? `${formData.patient.firstName} ${formData.patient.middleName} ${formData.patient.lastName}`
-                        : ""
-                    }
-                    onChange={handleChange}
-                    disabled
-                  />
-                </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="examiner">Examiner</Label>
-                  <Input
-                    id="examiner"
-                    placeholder=""
-                    value={
-                      formData?.provider
-                        ? `${formData.provider.firstName} ${formData.provider.lastName}`
-                        : ""
-                    }
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="startDateTime">
+                  Check In<span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="startDateTime"
+                  name="startDateTime"
+                  type="datetime-local"
+                  required
+                  defaultValue={formatFetchedLocalDateTime(visit.startDateTime)}
+                />
+                {fieldError("startDateTime") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("startDateTime")}
+                  </p>
+                )}
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="startDateTime">
-                    Check In<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="startDateTime"
-                    type="datetime-local"
-                    required
-                    value={startDateTimeValue}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="grid gap-3">
-                  <Label htmlFor="visitType">
-                    Type<span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    required
-                    value={patientVisit?.visitType}
-                    onValueChange={(value) =>
-                      handleSelectChange("visitType", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CLINIC">Clinic</SelectItem>
-                      <SelectItem value="EMERGENCY">Emergency</SelectItem>
-                      <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
-                      <SelectItem value="IMAGING">Imaging</SelectItem>
-                      <SelectItem value="LAB">Lab</SelectItem>
-                      <SelectItem value="PHARMACY">Pharmacy</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid gap-3">
+                <Label htmlFor="visitType">
+                  Type<span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  name="visitType"
+                  required
+                  defaultValue={visit.visitType}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CLINIC">Clinic</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                    <SelectItem value="FOLLOWUP">Follow-up</SelectItem>
+                    <SelectItem value="IMAGING">Imaging</SelectItem>
+                    <SelectItem value="LAB">Lab</SelectItem>
+                    <SelectItem value="PHARMACY">Pharmacy</SelectItem>
+                  </SelectContent>
+                </Select>
+                {fieldError("visitType") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("visitType")}
+                  </p>
+                )}
               </div>
+            </div>
 
-              <div className="grid md:grid-cols-2 gap-10">
-                <div className="grid gap-3">
-                  <Label htmlFor="reason">Reason</Label>
-                  <Textarea
-                    id="reason"
-                    placeholder=""
-                    value={formData?.reason || ""}
-                    onChange={handleChange}
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid gap-3">
+                <Label htmlFor="reason">Reason</Label>
+                <Textarea
+                  id="reason"
+                  name="reason"
+                  defaultValue={visit.reason ?? ""}
+                />
+                {fieldError("reason") && (
+                  <p className="text-sm text-red-600">{fieldError("reason")}</p>
+                )}
               </div>
+            </div>
 
-              <Button
-                type="submit"
-                className="mt-4 mr-2"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Updating..." : "Update Visit"}
-              </Button>
-              <Button type="button" onClick={() => router.back()}>
-                Back
-              </Button>
-            </form>
-          )}
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
+
+            <Button type="submit" className="mt-4 mr-2" disabled={isSubmitting}>
+              {isSubmitting ? "Updating..." : "Update Visit"}
+            </Button>
+            <Button type="button" onClick={() => router.back()}>
+              Back
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

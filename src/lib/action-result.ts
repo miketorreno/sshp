@@ -6,6 +6,8 @@
  * here so the same code always reads the same way to the browser.
  */
 
+import type { ZodError, ZodType } from "zod";
+
 export const FAILURE_CODES = {
   UNAUTHENTICATED: "UNAUTHENTICATED",
   INVALID_INPUT: "INVALID_INPUT",
@@ -50,7 +52,7 @@ export function actionSuccess<T>(data: T): { ok: true; data: T } {
 
 export function actionFailure(
   code: FailureCode,
-  options?: { message?: string; fieldErrors?: Record<string, string[]> }
+  options?: { message?: string; fieldErrors?: Record<string, string[]> },
 ): ActionFailureResult {
   return {
     ok: false,
@@ -76,3 +78,38 @@ export function statusForFailure(code: FailureCode): number {
   return FAILURE_STATUSES[code];
 }
 
+/**
+ * The field errors a form submission produced, in the shape a failure carries
+ * them. One place owns that shape, so every form's field errors read the same way
+ * to the browser no matter which schema rejected the submission.
+ */
+export function fieldErrorsFrom(error: ZodError): Record<string, string[]> {
+  const fieldErrors: Record<string, string[]> = {};
+
+  for (const issue of error.issues) {
+    const field = issue.path[0];
+
+    if (typeof field !== "string") continue;
+
+    fieldErrors[field] = [...(fieldErrors[field] ?? []), issue.message];
+  }
+
+  return fieldErrors;
+}
+
+/**
+ * Parses a form submission, or returns the failure the form should show: the
+ * invalid-input result carrying one message per field the schema rejected.
+ */
+export function parseSubmission<T>(
+  schema: ZodType<T>,
+  submission: unknown,
+): { ok: true; input: T } | ActionFailureResult {
+  const parsed = schema.safeParse(submission);
+
+  if (parsed.success) return { ok: true, input: parsed.data };
+
+  return actionFailure(FAILURE_CODES.INVALID_INPUT, {
+    fieldErrors: fieldErrorsFrom(parsed.error),
+  });
+}

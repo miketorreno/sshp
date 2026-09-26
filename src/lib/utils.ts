@@ -30,7 +30,7 @@ export function formatDate(date: Date | string) {
   });
 }
 
-export function formatTime(date: Date) {
+export function formatTime(date: Date | string) {
   const dt = new Date(date);
   return dt.toLocaleString("en-US", {
     hour: "2-digit",

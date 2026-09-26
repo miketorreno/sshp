@@ -18,23 +18,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { calculateAge, formatTime } from "@/lib/utils";
-import { toast } from "sonner";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useVisitList } from "@/client/visits/queries";
+import { localDay, startOfToday } from "@/lib/clinic-day";
 
-async function fetchOutpatients(): Promise<PatientVisit[]> {
-  const response = await fetch("/api/patients/outpatients").then((res) =>
-    res.json()
-  );
-  return response;
-}
-
+/**
+ * Today's Outpatients is the clinic day's list read: it asks the canonical visit
+ * list for today's window rather than a second endpoint of its own, so a visit
+ * that shows here is a visit the rest of the clinic can read.
+ */
 const OutpatientsPage = () => {
   const router = useRouter();
-
-  const { isPending, error, data } = useQuery({
-    queryKey: ["outpatients"],
-    queryFn: fetchOutpatients,
+  const today = localDay(startOfToday());
+  const {
+    data: visits,
+    isPending,
+    isError,
+  } = useVisitList({
+    from: today,
+    to: today,
   });
 
   if (isPending) {
@@ -45,9 +47,7 @@ const OutpatientsPage = () => {
     );
   }
 
-  if (error) {
-    toast.error("Failed to load outpatients");
-
+  if (isError) {
     return (
       <div className="flex justify-center items-center h-40">
         <p className="text-red-600">Error loading outpatients</p>
@@ -69,7 +69,7 @@ const OutpatientsPage = () => {
 
       <Card>
         <CardContent>
-          {data?.length === 0 ? (
+          {visits?.length === 0 ? (
             <div className="flex justify-center items-center h-40">
               <p>No outpatients today</p>
             </div>
@@ -91,7 +91,7 @@ const OutpatientsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.map((outpatient) => (
+                {visits?.map((outpatient) => (
                   <TableRow key={outpatient.id}>
                     <TableCell>
                       {outpatient.patient.firstName}{" "}
@@ -111,13 +111,11 @@ const OutpatientsPage = () => {
                     <TableCell></TableCell>
                     {/* <TableCell>{getNextAppointmentDate(patient)}</TableCell> */}
                     <TableCell>
-                      {outpatient?.provider &&
-                        outpatient?.provider.role === "DOCTOR" && (
-                          <h4 className="text-xl font-semibold">
-                            {outpatient.provider.firstName}{" "}
-                            {outpatient.provider.lastName}
-                          </h4>
-                        )}
+                      {outpatient.provider ? (
+                        <h4 className="text-xl font-semibold">
+                          {outpatient.provider.name}
+                        </h4>
+                      ) : null}
                     </TableCell>
                     <TableCell>Orders</TableCell>
                     <TableCell>Status</TableCell>
@@ -146,7 +144,7 @@ const OutpatientsPage = () => {
                           <DropdownMenuItem
                             onClick={() =>
                               router.push(
-                                `/patients/${outpatient.patient.id}/appointments/new`
+                                `/patients/${outpatient.patient.id}/appointments/new`,
                               )
                             }
                           >
@@ -155,7 +153,7 @@ const OutpatientsPage = () => {
                           <DropdownMenuItem
                             onClick={() =>
                               router.push(
-                                `/patients/${outpatient.patient.id}/history`
+                                `/patients/${outpatient.patient.id}/history`,
                               )
                             }
                           >
@@ -164,7 +162,7 @@ const OutpatientsPage = () => {
                           <DropdownMenuItem
                             onClick={() =>
                               router.push(
-                                `/patients/${outpatient.patient.id}/prescriptions/new`
+                                `/patients/${outpatient.patient.id}/prescriptions/new`,
                               )
                             }
                           >

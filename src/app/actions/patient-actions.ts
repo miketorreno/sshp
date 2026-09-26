@@ -2,9 +2,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  FAILURE_CODES,
   actionFailure,
-  type ActionFailureResult,
+  FAILURE_CODES,
+  parseSubmission,
   type ActionResult,
 } from "@/lib/action-result";
 import { PATIENT_LIST_PAGE } from "@/server/patients/contract";
@@ -13,11 +13,9 @@ import {
   deletePatient as deletePatientCommand,
   updatePatient as updatePatientCommand,
   type PatientArchiveResult,
-  type PatientInput,
   type PatientWriteResult,
 } from "@/server/patients/commands";
 import {
-  fieldErrorsFrom,
   patientInputFromFormData,
   patientInputSchema,
 } from "@/server/patients/schema";
@@ -29,7 +27,7 @@ import {
  */
 
 export async function createPatient(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult<PatientWriteResult>> {
   const submission = parsePatientForm(formData);
 
@@ -44,7 +42,7 @@ export async function createPatient(
 }
 
 export async function updatePatient(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult<PatientWriteResult>> {
   const patientId = formData.get("id");
 
@@ -71,7 +69,7 @@ export async function updatePatient(
  * caller stays where it is and invalidates the reads the archive changed.
  */
 export async function deletePatient(
-  patientId: string
+  patientId: string,
 ): Promise<ActionResult<PatientArchiveResult>> {
   const result = await deletePatientCommand(patientId);
 
@@ -83,18 +81,11 @@ export async function deletePatient(
 }
 
 /** Parses a patient submission, or returns the failure the form should show. */
-function parsePatientForm(
-  formData: FormData
-): { ok: true; input: PatientInput } | ActionFailureResult {
-  const parsed = patientInputSchema.safeParse(
-    patientInputFromFormData(formData)
+function parsePatientForm(formData: FormData) {
+  return parseSubmission(
+    patientInputSchema,
+    patientInputFromFormData(formData),
   );
-
-  if (parsed.success) return { ok: true, input: parsed.data };
-
-  return actionFailure(FAILURE_CODES.INVALID_INPUT, {
-    fieldErrors: fieldErrorsFrom(parsed.error),
-  });
 }
 
 function patientPage(patientId: string) {

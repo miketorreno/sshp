@@ -58,19 +58,3 @@ export function patientInputFromFormData(formData: FormData) {
     PATIENT_FORM_FIELDS.map((field) => [field, formData.get(field)])
   );
 }
-
-export function fieldErrorsFrom(
-  error: z.ZodError
-): Record<string, string[]> {
-  const fieldErrors: Record<string, string[]> = {};
-
-  for (const issue of error.issues) {
-    const field = issue.path[0];
-
-    if (typeof field !== "string") continue;
-
-    fieldErrors[field] = [...(fieldErrors[field] ?? []), issue.message];
-  }
-
-  return fieldErrors;
-}

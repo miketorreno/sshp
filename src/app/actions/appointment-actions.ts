@@ -1,11 +1,10 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { z } from "zod";
 import {
-  FAILURE_CODES,
   actionFailure,
-  type ActionFailureResult,
+  FAILURE_CODES,
+  parseSubmission,
   type ActionResult,
 } from "@/lib/action-result";
 import {
@@ -24,7 +23,6 @@ import {
 import {
   createAppointmentInputFromFormData,
   createAppointmentSchema,
-  fieldErrorsFrom,
   updateAppointmentInputFromFormData,
   updateAppointmentSchema,
 } from "@/server/appointments/schema";
@@ -36,11 +34,11 @@ import {
  */
 
 export async function createAppointment(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult<AppointmentWriteResult>> {
-  const submission = parse(
+  const submission = parseSubmission(
     createAppointmentSchema,
-    createAppointmentInputFromFormData(formData)
+    createAppointmentInputFromFormData(formData),
   );
 
   if (!submission.ok) return submission;
@@ -54,7 +52,7 @@ export async function createAppointment(
 }
 
 export async function updateAppointment(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult<AppointmentWriteResult>> {
   const appointmentId = formData.get("id");
 
@@ -64,16 +62,16 @@ export async function updateAppointment(
     });
   }
 
-  const submission = parse(
+  const submission = parseSubmission(
     updateAppointmentSchema,
-    updateAppointmentInputFromFormData(formData)
+    updateAppointmentInputFromFormData(formData),
   );
 
   if (!submission.ok) return submission;
 
   const result = await updateAppointmentCommand(
     appointmentId,
-    submission.input
+    submission.input,
   );
 
   if (!result.ok) return result;
@@ -87,7 +85,7 @@ export async function updateAppointment(
  * caller stays where it is and invalidates the reads the archive changed.
  */
 export async function deleteAppointment(
-  appointmentId: string
+  appointmentId: string,
 ): Promise<ActionResult<AppointmentArchiveResult>> {
   const result = await deleteAppointmentCommand(appointmentId);
 
@@ -103,7 +101,7 @@ export async function deleteAppointment(
  * navigates to that visit.
  */
 export async function checkInAppointment(
-  appointmentId: string
+  appointmentId: string,
 ): Promise<ActionResult<CheckInResult>> {
   const result = await checkInAppointmentCommand(appointmentId);
 
@@ -111,20 +109,6 @@ export async function checkInAppointment(
 
   revalidateAppointmentPages();
   redirect(`/visits/${result.data.visitId}`);
-}
-
-/** Parses a submission, or returns the failure the form should show. */
-function parse<T>(
-  schema: z.ZodType<T>,
-  submission: unknown
-): { ok: true; input: T } | ActionFailureResult {
-  const parsed = schema.safeParse(submission);
-
-  if (parsed.success) return { ok: true, input: parsed.data };
-
-  return actionFailure(FAILURE_CODES.INVALID_INPUT, {
-    fieldErrors: fieldErrorsFrom(parsed.error),
-  });
 }
 
 function revalidateAppointmentPages() {
