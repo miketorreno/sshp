@@ -26,13 +26,28 @@ import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import { checkoutVisit } from "@/app/actions/visit-actions";
 import { deleteVitals } from "@/app/actions/vitals-actions";
+import {
+  deleteImagingOrder,
+  deleteLabOrder,
+  deleteMedicationOrder,
+} from "@/app/actions/order-actions";
 import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
 import type { VisitDetailDto } from "@/server/visits/dto";
+
+/** The kinds of order a visit holds, and the name each is reported under. */
+const ORDER_KINDS = {
+  lab: { archive: deleteLabOrder, label: "Lab" },
+  imaging: { archive: deleteImagingOrder, label: "Imaging" },
+  medication: { archive: deleteMedicationOrder, label: "Medication" },
+} as const;
+
+type OrderKind = keyof typeof ORDER_KINDS;
 
 /**
  * One visit and the records recorded during it. The visit is read through the
  * canonical detail read, so this page sees the same visit as every other screen,
- * and a checkout or a vitals removal re-reads it rather than reloading the page.
+ * and a checkout, a vitals removal or an archived order re-reads it rather than
+ * reloading the page.
  */
 const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
@@ -41,6 +56,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const { data: visit, isPending, isError } = useVisitDetail(id);
   const [isCheckingOut, startCheckingOut] = useTransition();
   const [isArchivingVitals, startArchivingVitals] = useTransition();
+  const [isArchivingOrder, startArchivingOrder] = useTransition();
 
   // A checkout ends the visit where the clinician is looking, so it reports
   // instead of navigating, and the visit is re-read to show the new end.
@@ -65,24 +81,26 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     });
   };
 
-  // Orders are written by the orders surface, so this page still reports what it
-  // knows about them; their own migration is separate.
-  const deleteOrder = async (id: string, type: string) => {
+  // "Delete" on an order means the order leaves this visit's clinical reads, so
+  // it reports the archive and the visit is re-read rather than reloaded.
+  const archiveOrder = (
+    visitId: string,
+    kind: OrderKind,
+    orderId: string,
+  ) => {
     if (!confirm("Are you sure you want to delete this order?")) return;
 
-    try {
-      const res = await fetch(`/api/orders/${type}/${id}`, {
-        method: "DELETE",
-      });
+    startArchivingOrder(async () => {
+      const result = await ORDER_KINDS[kind].archive(visitId, orderId);
 
-      if (!res.ok) throw new Error("Failed to delete order");
+      if (!result.ok) {
+        toast.error(result.error.message);
+        return;
+      }
 
-      toast.success(
-        `${type.charAt(0).toUpperCase() + type.slice(1)} order deleted`,
-      );
-    } catch {
-      toast.error("Error while deleting order");
-    }
+      await invalidateVisitWrites(queryClient, visitId);
+      toast.success(`${ORDER_KINDS[kind].label} order deleted`);
+    });
   };
 
   const archiveVitals = (visit: VisitDetailDto, vitalsId: string) => {
@@ -293,8 +311,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
+                                    disabled={isArchivingOrder}
                                     onClick={() =>
-                                      deleteOrder(labOrder.id, "lab")
+                                      archiveOrder(visit.id, "lab", labOrder.id)
                                     }
                                   >
                                     Delete
@@ -344,8 +363,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
+                                    disabled={isArchivingOrder}
                                     onClick={() =>
-                                      deleteOrder(imagingOrder.id, "imaging")
+                                      archiveOrder(visit.id, "imaging", imagingOrder.id)
                                     }
                                   >
                                     Delete
@@ -361,7 +381,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                             <TableCell>
                               {formatDateTime(medOrder.orderedAt)}
                             </TableCell>
-                            <TableCell>Medicine</TableCell>
+                            <TableCell>{medOrder.medication}</TableCell>
                             <TableCell>Medication</TableCell>
                             <TableCell>{medOrder.orderStatus}</TableCell>
                             <TableCell>
@@ -393,8 +413,9 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
+                                    disabled={isArchivingOrder}
                                     onClick={() =>
-                                      deleteOrder(medOrder.id, "medication")
+                                      archiveOrder(visit.id, "medication", medOrder.id)
                                     }
                                   >
                                     Delete

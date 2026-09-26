@@ -80,6 +80,69 @@ export function vitals(overrides: Record<string, unknown> = {}) {
   };
 }
 
+export function labOrder(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "lab-order-1",
+    visitId: "visit-1",
+    orderedById: "user-1",
+    orderedAt: new Date("2026-03-02T09:35:00.000Z"),
+    completedAt: null,
+    orderStatus: "REQUESTED",
+    labType: "Complete Blood Count",
+    notes: null,
+    result: null,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+export function imagingOrder(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "imaging-order-1",
+    visitId: "visit-1",
+    orderedById: "user-1",
+    orderedAt: new Date("2026-03-02T09:36:00.000Z"),
+    completedAt: null,
+    orderStatus: "REQUESTED",
+    imagingType: "Chest X-Ray (2 views)",
+    notes: null,
+    result: null,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+export function medOrder(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "med-order-1",
+    visitId: "visit-1",
+    orderedById: "user-1",
+    medicationId: "medication-1",
+    orderedAt: new Date("2026-03-02T09:37:00.000Z"),
+    completedAt: null,
+    orderStatus: "REQUESTED",
+    dosage: "500mg",
+    frequency: "Twice a day",
+    route: "Oral",
+    notes: null,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+/** A medication a request can name, from the pharmacy's catalogue. */
+export function medication(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "medication-1",
+    name: "Amoxicillin",
+    brandName: "Amoxil",
+    description: "Penicillin antibiotic",
+    stockQuantity: 40,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
 /** A moment on a clinic day, so a spec can say "yesterday" without hard-coding one. */
 export const hoursFromStartOfToday = (hours: number) =>
   new Date(startOfToday().getTime() + hours * 60 * 60 * 1000);
@@ -100,7 +163,7 @@ export function seedVisits(
     clinicalNotes = [],
     diagnoses = [],
     procedures = [],
-    medications = [],
+    medications: medicationRows = [],
   }: Partial<Record<keyof VisitTable, Record<string, unknown>[]>> = {},
 ) {
   const replace = (name: keyof VisitTable, rows: Record<string, unknown>[]) => {
@@ -119,6 +182,6 @@ export function seedVisits(
   replace("clinicalNotes", clinicalNotes);
   replace("diagnoses", diagnoses);
   replace("procedures", procedures);
-  replace("medications", medications);
+  replace("medications", medicationRows);
   table.destroyed.splice(0, table.destroyed.length);
 }

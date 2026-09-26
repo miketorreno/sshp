@@ -1,10 +1,10 @@
 /**
  * An in-memory stand-in for the visit table and the clinical records that hang
- * off it: vitals, orders, notes, diagnoses and procedures. Tests seed a clinic's
- * rows, then observe which visits a read returns, which records are hidden after
- * an archive, and whether a write destroyed a row. They never assert on the
- * queries a module issues, so the module stays free to change how it asks the
- * database.
+ * off it: vitals, orders, notes, diagnoses and procedures, plus the medication
+ * catalogue an order names. Tests seed a clinic's rows, then observe which visits
+ * a read returns, which records are hidden after an archive, and whether a write
+ * destroyed a row. They never assert on the queries a module issues, so the
+ * module stays free to change how it asks the database.
  *
  * It understands only the query features the visit surface uses: equality, `in`,
  * date comparisons (`gte`, `lt`), `orderBy`, `skip`, `take`, `select`, and
@@ -44,6 +44,10 @@ type Table = {
 type Store = {
   visit: Table;
   vitals: Table;
+  labOrder: Table;
+  imagingOrder: Table;
+  medicationOrder: Table;
+  medication: Table;
   patient: Pick<Table, "findFirst">;
 };
 
@@ -84,6 +88,9 @@ export type VisitTable = {
   destroyed: string[];
   findVisit: (id: string) => Row | undefined;
   findVitals: (id: string) => Row | undefined;
+  findLabOrder: (id: string) => Row | undefined;
+  findImagingOrder: (id: string) => Row | undefined;
+  findMedOrder: (id: string) => Row | undefined;
 };
 
 /** The child collections a visit owns, and the visit column that joins them. */
@@ -126,6 +133,13 @@ const CHILD_OWNER: Record<keyof typeof VISIT_CHILDREN, string> = {
   procedures: "visitId",
 };
 
+/** The values the schema fills in for a new order, so a created order reads whole. */
+const ORDER_DEFAULTS: Row = {
+  orderedAt: new Date("2026-03-02T09:35:00.000Z"),
+  completedAt: null,
+  orderStatus: "REQUESTED",
+};
+
 export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
   const collections: Collections = {
     patients: rows(seed.patients),
@@ -142,12 +156,27 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
   };
   const destroyed: string[] = [];
 
-  const table = (name: keyof typeof VISIT_CHILDREN) =>
-    makeTable(collections[name], `visit-${name}`, destroyed, () => collections);
+  const table = (name: keyof typeof VISIT_CHILDREN, defaults?: Row) =>
+    makeTable(
+      collections[name],
+      `visit-${name}`,
+      destroyed,
+      () => collections,
+      defaults,
+    );
 
   const store: Store = {
     visit: makeTable(collections.visits, "visit", destroyed, () => collections),
     vitals: table("vitals"),
+    labOrder: table("labOrders", ORDER_DEFAULTS),
+    imagingOrder: table("imagingOrders", ORDER_DEFAULTS),
+    medicationOrder: table("medOrders", ORDER_DEFAULTS),
+    medication: makeTable(
+      collections.medications,
+      "medication",
+      destroyed,
+      () => collections,
+    ),
     patient: {
       findFirst: async ({ where, select }: Args = {}) => {
         const found = collections.patients.find((row) => matches(row, where));
@@ -175,6 +204,10 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
     destroyed,
     findVisit: (id) => collections.visits.find((row) => row.id === id),
     findVitals: (id) => collections.vitals.find((row) => row.id === id),
+    findLabOrder: (id) => collections.labOrders.find((row) => row.id === id),
+    findImagingOrder: (id) =>
+      collections.imagingOrders.find((row) => row.id === id),
+    findMedOrder: (id) => collections.medOrders.find((row) => row.id === id),
   };
 }
 
@@ -183,6 +216,7 @@ function makeTable(
   idPrefix: string,
   destroyed: string[],
   collections: () => Collections,
+  defaults: Row = {},
 ): Table {
   return {
     findMany: async ({
@@ -220,6 +254,7 @@ function makeTable(
         createdAt: new Date("2026-03-01T00:00:00.000Z"),
         updatedAt: new Date("2026-03-01T00:00:00.000Z"),
         deletedAt: null,
+        ...defaults,
         ...data,
       };
 

@@ -4,93 +4,74 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { use, useActionState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { requestMedicationOrder } from "@/app/actions/order-actions";
+import { useMedications } from "@/client/medications/queries";
+import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
+import { visitPage } from "@/server/visits/contract";
 
-const AddMedicationRequest = ({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) => {
+type MedicationOrderActionState =
+  | Awaited<ReturnType<typeof requestMedicationOrder>>
+  | null;
+
+/**
+ * A medication request names a medication from the pharmacy's catalogue, so the
+ * order records what was chosen rather than a name typed free-hand. The request
+ * belongs to the visit the page is on, and the new order is read back from it.
+ */
+const AddMedicationRequest = ({ params }: { params: Promise<{ id: string }> }) => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<PatientVisit>();
-  const [patientVisit, setPatientVisit] = useState<PatientVisit>();
+  const queryClient = useQueryClient();
+  const { id } = use(params);
+  const { data: visit, isPending, isError } = useVisitDetail(id);
+  const { data: medications, isPending: isLoadingMedications } = useMedications();
 
-  const fetchVisit = async () => {
-    const { id } = await params;
+  // The action reports rather than redirecting, so the visit carrying the new
+  // order is re-read before the page moves back to it.
+  const [result, submit, isSubmitting] = useActionState(
+    async (_previous: MedicationOrderActionState, formData: FormData) => {
+      const outcome = await requestMedicationOrder(formData);
 
-    try {
-      const res = await fetch(`/api/visits/${id}`);
-
-      if (res.status === 404) {
-        throw new Error("Visit not found");
+      if (outcome.ok) {
+        await invalidateVisitWrites(queryClient, id);
+        router.push(visitPage(id));
       }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to fetch visit");
-      }
+      return outcome;
+    },
+    null,
+  );
 
-      const data = await res.json();
-      setPatientVisit(data);
-      setFormData(data);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Error while fetching visit");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isPending) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p>Loading visit...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    fetchVisit();
-  }, []);
+  if (isError || !visit) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <p className="text-red-600">Visit not found</p>
+      </div>
+    );
+  }
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value } as PatientVisit));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch(
-        `/api/visits/${patientVisit?.id}/request/medication`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            patient: { id: patientVisit?.patient.id },
-            visit: { id: patientVisit?.id },
-          }),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create medication request");
-      }
-
-      toast.success("Medication request created");
-      router.push(`/visits/${patientVisit?.id}`);
-    } catch (err) {
-      console.error("Error: ", err);
-      toast.error("Failed to create medication request");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const fieldError = (field: string) =>
+    result && !result.ok && result.error.fieldErrors?.[field]
+      ? result.error.fieldErrors[field][0]
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -100,121 +81,118 @@ const AddMedicationRequest = ({
 
       <Card className="mb-8">
         <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center h-40">
-              <p>Loading...</p>
+          <form action={submit} className="space-y-12">
+            <input type="hidden" name="id" value={visit.id} />
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="patient">Patient</Label>
+                <Input
+                  id="patient"
+                  value={`${visit.patient.firstName} ${visit.patient.middleName} ${visit.patient.lastName}`}
+                  disabled
+                />
+              </div>
+
+              <div className="grid gap-3">
+                <Label htmlFor="visit">Visit</Label>
+                <Input
+                  id="visit"
+                  value={`${formatDateTime(visit.startDateTime)} - ${visit.visitType}`}
+                  disabled
+                />
+              </div>
             </div>
-          ) : (
-            <form className="space-y-12" onSubmit={handleSubmit}>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="patient">
-                    Patient<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="patient"
-                    placeholder=""
-                    value={
-                      formData?.patient
-                        ? `${formData.patient.firstName} ${formData.patient.middleName} ${formData.patient.lastName}`
-                        : ""
-                    }
-                    disabled
-                  />
-                </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="visit">
-                    Visit<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="visit"
-                    placeholder=""
-                    value={`${formatDateTime(formData?.startDateTime)} - ${
-                      formData?.visitType
-                    }`}
-                    onChange={handleChange}
-                    disabled
-                  />
-                </div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid gap-3">
+                <Label htmlFor="medicationId">
+                  Medication<span className="text-red-500">*</span>
+                </Label>
+                <Select name="medicationId">
+                  <SelectTrigger id="medicationId" className="w-full">
+                    <SelectValue
+                      placeholder={
+                        isLoadingMedications
+                          ? "Loading medications..."
+                          : "Select a medication"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {medications?.map((medication) => (
+                      <SelectItem key={medication.id} value={medication.id}>
+                        {medication.name}
+                        {medication.brandName
+                          ? ` (${medication.brandName})`
+                          : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fieldError("medicationId") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("medicationId")}
+                  </p>
+                )}
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="grid gap-3">
-                  <Label htmlFor="medication">
-                    Medication<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="medication"
-                    placeholder=""
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+              <div className="grid gap-3">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea id="notes" name="notes" placeholder="" />
+              </div>
+            </div>
 
-                <div className="grid gap-3">
-                  <Label htmlFor="prescription">
-                    Prescription <span className="text-red-500">*</span>
-                  </Label>
-                  <Textarea
-                    id="prescription"
-                    placeholder=""
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+            <div className="grid md:grid-cols-3 gap-10">
+              <div className="grid gap-3">
+                <Label htmlFor="dosage">
+                  Dosage<span className="text-red-500">*</span>
+                </Label>
+                <Input id="dosage" name="dosage" placeholder="500mg" required />
+                {fieldError("dosage") && (
+                  <p className="text-sm text-red-600">{fieldError("dosage")}</p>
+                )}
               </div>
 
-              <div className="grid md:grid-cols-3 gap-10">
-                <div className="grid gap-3">
-                  <Label htmlFor="dosage">
-                    Dosage<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="dosage"
-                    placeholder="500mg"
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="grid gap-3">
-                  <Label htmlFor="frequency">
-                    Frequency<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="frequency"
-                    placeholder="Twice a day"
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="grid gap-3">
-                  <Label htmlFor="route">
-                    Route<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="route"
-                    placeholder="Oral"
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+              <div className="grid gap-3">
+                <Label htmlFor="frequency">
+                  Frequency<span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="frequency"
+                  name="frequency"
+                  placeholder="Twice a day"
+                  required
+                />
+                {fieldError("frequency") && (
+                  <p className="text-sm text-red-600">
+                    {fieldError("frequency")}
+                  </p>
+                )}
               </div>
 
-              <Button
-                type="submit"
-                className="mt-4 mr-2"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Adding..." : "Add Request"}
-              </Button>
-              <Button type="button" onClick={() => router.back()}>
-                Back
-              </Button>
-            </form>
-          )}
+              <div className="grid gap-3">
+                <Label htmlFor="route">
+                  Route<span className="text-red-500">*</span>
+                </Label>
+                <Input id="route" name="route" placeholder="Oral" required />
+                {fieldError("route") && (
+                  <p className="text-sm text-red-600">{fieldError("route")}</p>
+                )}
+              </div>
+            </div>
+
+            {result && !result.ok && (
+              <p className="text-red-600">{result.error.message}</p>
+            )}
+
+            <Button type="submit" className="mt-4 mr-2" disabled={isSubmitting}>
+              {isSubmitting ? "Adding..." : "Add Request"}
+            </Button>
+            <Button type="button" onClick={() => router.back()}>
+              Back
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

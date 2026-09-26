@@ -5,6 +5,12 @@ import {
   createVisitSchema,
   recordVitalsInputFromFormData,
   recordVitalsSchema,
+  requestImagingOrderInputFromFormData,
+  requestImagingOrderSchema,
+  requestLabOrderInputFromFormData,
+  requestLabOrderSchema,
+  requestMedicationOrderInputFromFormData,
+  requestMedicationOrderSchema,
   updateVisitInputFromFormData,
   updateVisitSchema,
 } from "@/server/visits/schema";
@@ -131,6 +137,105 @@ describe("visit schemas", () => {
       const submitted = recordVitalsInputFromFormData(vitalsForm());
 
       expect("visitId" in submitted).toBe(false);
+    });
+  });
+
+  describe("orders", () => {
+    it("reads a lab request, treating cleared notes as no notes", () => {
+      const parsed = requestLabOrderSchema.safeParse(
+        requestLabOrderInputFromFormData(
+          form({ labType: "Complete Blood Count", notes: "  " }),
+        ),
+      );
+
+      expect(parsed.success && parsed.data).toEqual({
+        labType: "Complete Blood Count",
+        notes: null,
+      });
+    });
+
+    it("asks for the lab test a request does not name", () => {
+      const parsed = requestLabOrderSchema.safeParse({ notes: null });
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]).toMatchObject({
+        path: ["labType"],
+        message: "Enter the lab test",
+      });
+    });
+
+    it("reads an imaging request, treating cleared notes as no notes", () => {
+      const parsed = requestImagingOrderSchema.safeParse(
+        requestImagingOrderInputFromFormData(
+          form({ imagingType: "Chest X-Ray (2 views)", notes: "" }),
+        ),
+      );
+
+      expect(parsed.success && parsed.data).toEqual({
+        imagingType: "Chest X-Ray (2 views)",
+        notes: null,
+      });
+    });
+
+    it("asks for the imaging study a request does not name", () => {
+      const parsed = requestImagingOrderSchema.safeParse({ notes: null });
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]).toMatchObject({
+        path: ["imagingType"],
+        message: "Enter the imaging study",
+      });
+    });
+
+    it("reads a medication request, keeping the medication it names", () => {
+      const parsed = requestMedicationOrderSchema.safeParse(
+        requestMedicationOrderInputFromFormData(
+          form({
+            medicationId: "medication-1",
+            dosage: "500mg",
+            frequency: "Twice a day",
+            route: "Oral",
+            notes: "  ",
+          }),
+        ),
+      );
+
+      expect(parsed.success && parsed.data).toEqual({
+        medicationId: "medication-1",
+        dosage: "500mg",
+        frequency: "Twice a day",
+        route: "Oral",
+        notes: null,
+      });
+    });
+
+    it("asks for a medication when a request names none", () => {
+      const parsed = requestMedicationOrderSchema.safeParse({
+        medicationId: "",
+        dosage: "500mg",
+        frequency: "Twice a day",
+        route: "Oral",
+      });
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]).toMatchObject({
+        path: ["medicationId"],
+        message: "Select a medication",
+      });
+    });
+
+    it("takes no visit from any request form, because the path owns it", () => {
+      expect(
+        "visitId" in requestLabOrderInputFromFormData(form({ labType: "CBC" })),
+      ).toBe(false);
+      expect(
+        "visitId" in
+          requestImagingOrderInputFromFormData(form({ imagingType: "X-Ray" })),
+      ).toBe(false);
+      expect(
+        "visitId" in
+          requestMedicationOrderInputFromFormData(form({ dosage: "500mg" })),
+      ).toBe(false);
     });
   });
 });

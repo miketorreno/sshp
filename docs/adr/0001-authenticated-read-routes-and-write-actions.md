@@ -1,11 +1,14 @@
 ---
 status: accepted
 date: 2026-09-25
+amended: 2026-09-26
 ---
 
 # Authenticated read routes and write actions
 
 The app will use authenticated GET route handlers for browser reads and authenticated domain server actions for writes, with Better Auth's catch-all as the only REST exception. This gives each mutation one validation, authorization, revalidation, and cache-invalidation path while retaining a simple read seam for the calendar, combobox, and React Query pages.
+
+> Amended 2026-09-26 by the order slice: `/api/medications` and `medications:list` are added, because a medication request names a medication from the pharmacy's catalogue. The catalogue is read-only from the browser, so it adds a read and no write method.
 
 ## Boundaries
 
@@ -43,6 +46,7 @@ Each write calls `revalidatePath` for any affected server-rendered path; that is
 | `/api/patients/admitted` | Authenticated, patient-centric admitted-patient DTO |
 | `/api/visits` | Canonical authenticated visit-list DTO with a date-window and visit-type filter; consumed by Today's Outpatients; includes the patient and provider fields the page renders |
 | `/api/visits/[id]` | Authenticated visit-detail DTO; `PUT` and `DELETE` are removed |
+| `/api/medications` | Authenticated active medication catalogue DTO, consumed by the medication request form; added by the order slice |
 | `/api/auth/[...all]` | Better Auth exception, unchanged |
 
 `/api/patients/outpatients` is removed after Today's Outpatients switches to `/api/visits`. The admitted endpoint returns patients, not fabricated visit rows; the page must use patient IDs and patient-detail links. The visit-list filter is a contract for the date window and visit type; the repository-wide time-zone rule is deferred to the calendar/backlog work, not settled by this migration.
@@ -52,8 +56,9 @@ Route reads return typed, browser-facing DTOs rather than raw Prisma shapes. The
 - `patients:list(filters)`, `patients:detail(id)`, `patients:admitted`, `patients:search(query)`
 - `appointments:list`, `appointments:detail(id)`
 - `visits:list(filters)`, `visits:detail(id)`
+- `medications:list`
 
-`patients:search(query)` is served by `GET /api/patients?query=...`; the patient combobox is its first consumer.
+`patients:search(query)` is served by `GET /api/patients?query=...`; the patient combobox is its first consumer. `medications:list` is served by `GET /api/medications` and is not invalidated by order writes, because an order changes a visit rather than the catalogue.
 
 Query keys include every filter that changes the result. The registry records the exact keys each write invalidates. Because list filters make keys distinct, a write invalidates the affected list prefix (for example every `patients:list(filters)` key) unless the change narrows to one key.
 
