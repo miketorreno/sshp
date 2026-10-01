@@ -88,7 +88,7 @@ export async function recordVitals(
   }
 }
 
-export async function deleteVitals(
+export async function archiveVitals(
   visitId: string,
   vitalsId: string,
 ): Promise<ActionResult<VitalsArchiveResult>> {

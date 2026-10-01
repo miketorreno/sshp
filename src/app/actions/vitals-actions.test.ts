@@ -17,7 +17,7 @@ vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
-import { addVitals, deleteVitals } from "@/app/actions/vitals-actions";
+import { addVitals, archiveVitals } from "@/app/actions/vitals-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   SESSION,
@@ -72,7 +72,7 @@ describe("vitals form commands", () => {
     getSession.mockResolvedValue(null);
 
     await expect(addVitals(vitalsForm())).resolves.toEqual(signedOut);
-    await expect(deleteVitals("visit-1", "vitals-1")).resolves.toEqual(
+    await expect(archiveVitals("visit-1", "vitals-1")).resolves.toEqual(
       signedOut,
     );
 
@@ -132,7 +132,7 @@ describe("vitals form commands", () => {
       vitals: [vitals(), other],
     });
 
-    await expect(deleteVitals("visit-1", "vitals-2")).resolves.toMatchObject({
+    await expect(archiveVitals("visit-1", "vitals-2")).resolves.toMatchObject({
       ok: false,
       error: { code: FAILURE_CODES.NOT_FOUND },
     });
@@ -140,7 +140,7 @@ describe("vitals form commands", () => {
   });
 
   it("archives the vitals and reports it, so the visit read can be invalidated", async () => {
-    const result = await deleteVitals("visit-1", "vitals-1");
+    const result = await archiveVitals("visit-1", "vitals-1");
 
     expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
     expect(table.findVitals("vitals-1")?.deletedAt).toBeInstanceOf(Date);

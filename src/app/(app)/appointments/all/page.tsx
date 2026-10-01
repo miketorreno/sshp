@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   checkInAppointment,
-  deleteAppointment,
+  archiveAppointment,
 } from "@/app/actions/appointment-actions";
 import {
   invalidateAppointmentWrites,
@@ -69,10 +69,10 @@ const AllAppointmentsPage = () => {
   const [isWriting, startWriting] = useTransition();
 
   const archive = (appointmentId: string) => {
-    if (!confirm("Are you sure you want to delete this appointment?")) return;
+    if (!confirm("Are you sure you want to archive this appointment?")) return;
 
     startWriting(async () => {
-      const result = await deleteAppointment(appointmentId);
+      const result = await archiveAppointment(appointmentId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -197,7 +197,7 @@ const AllAppointmentsPage = () => {
                               className="text-red-600"
                               onClick={() => archive(appointment.id)}
                             >
-                              Delete
+                              Archive
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

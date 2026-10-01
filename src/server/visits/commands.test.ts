@@ -25,7 +25,7 @@ import {
 import {
   checkoutVisit,
   createVisit,
-  deleteVisit,
+  archiveVisit,
   restoreVisit,
   updateVisit,
   type VisitInput,
@@ -205,7 +205,7 @@ describe("visit commands", () => {
 
   describe("archive", () => {
     it("archives the visit rather than destroying it", async () => {
-      const result = await deleteVisit("visit-1");
+      const result = await archiveVisit("visit-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")?.deletedAt).toBeInstanceOf(Date);
@@ -213,10 +213,10 @@ describe("visit commands", () => {
     });
 
     it("is idempotent, so a retried archive reports the same result", async () => {
-      await deleteVisit("visit-1");
+      await archiveVisit("visit-1");
       const first = table.findVisit("visit-1")?.deletedAt;
 
-      const retried = await deleteVisit("visit-1");
+      const retried = await archiveVisit("visit-1");
 
       expect(retried).toMatchObject({ ok: true });
       expect(table.findVisit("visit-1")?.deletedAt).toEqual(first);
@@ -225,7 +225,7 @@ describe("visit commands", () => {
     it("refuses to archive a visit that is checked out", async () => {
       seed({ visits: [visit({ endDateTime: CHECKED_OUT })] });
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -238,7 +238,7 @@ describe("visit commands", () => {
         visits: [visit({ endDateTime: CHECKED_OUT, deletedAt: archived })],
       });
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -248,7 +248,7 @@ describe("visit commands", () => {
     it("refuses an archive with no session", async () => {
       getSession.mockResolvedValue(null);
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.UNAUTHENTICATED },
       });
@@ -340,7 +340,7 @@ describe("roles", () => {
   it("refuses archiving a visit to the front desk", async () => {
     getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
 
-    await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+    await expect(archiveVisit("visit-1")).resolves.toMatchObject({
       ok: false,
       error: { code: FAILURE_CODES.FORBIDDEN },
     });

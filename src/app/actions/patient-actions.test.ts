@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({
 
 import {
   createPatient,
-  deletePatient,
+  archivePatient,
   updatePatient,
 } from "@/app/actions/patient-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
@@ -129,7 +129,7 @@ describe("patient form commands", () => {
     await expect(
       updatePatient(patientForm({ id: "patient-1" }))
     ).resolves.toEqual(signedOut);
-    await expect(deletePatient("patient-1")).resolves.toEqual(signedOut);
+    await expect(archivePatient("patient-1")).resolves.toEqual(signedOut);
 
     expect(table.rows).toEqual([ACTIVE_PATIENT]);
     expect(redirect).not.toHaveBeenCalled();
@@ -234,9 +234,9 @@ describe("patient form commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the patient and reports it, so the client can invalidate", async () => {
-      const result = await deletePatient("patient-1");
+      const result = await archivePatient("patient-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "patient-1" } });
 
@@ -252,14 +252,14 @@ describe("patient form commands", () => {
     });
 
     it("never deletes the patient row", async () => {
-      await deletePatient("patient-1");
+      await archivePatient("patient-1");
 
       expect(table.destroyed).toEqual([]);
       expect(table.find("patient-1")?.deletedAt).toBeInstanceOf(Date);
     });
 
     it("reports an unknown patient", async () => {
-      await expect(deletePatient("patient-404")).resolves.toEqual({
+      await expect(archivePatient("patient-404")).resolves.toEqual({
         ok: false,
         error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
       });

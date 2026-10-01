@@ -16,6 +16,8 @@ The app will use authenticated GET route handlers for browser reads and authenti
 >
 > Amended 2026-10-01 by #29: the patient search this document gave its own key and `?query=` parameter is gone. Search is a filter on the patient list read (`?search=`), the patient list answers with a total count, and `/api/patients/reports` is added as a read. The combobox is the first consumer of the filtered list, and patient writes revalidate both the list and report pages.
 >
+> Amended 2026-10-01 by #30: session presence is no longer the only authorization rule. Every domain read and every write command requires a named permission enforced at this boundary, per [ADR 0005](0005-role-permissions-at-the-read-and-write-boundary.md). The `delete*` command and action names below are `archive*`, because they archive; see [ADR 0002](0002-archive-deleted-clinical-records.md). The role-aware interface is still deferred.
+>
 > Amended 2026-09-26 by ADR-0003: the `/api/auth/[...all]` handler below is no longer unchanged — it now builds the auth system on first request rather than at import, which is the only way to keep it out of the build. Its path, methods, and public/unauthenticated split are unchanged. ADR-0003 also carves an exception out of the test seams below: proving a module builds nothing while being imported means mocking the client, so `src/lib/prisma.test.ts` and `src/lib/auth.test.ts` stand in for Prisma and Better Auth.
 
 ## Boundaries
@@ -23,8 +25,8 @@ The app will use authenticated GET route handlers for browser reads and authenti
 - `/api/*` is an internal browser contract, not a public API; existing paths remain and no versioned API is introduced.
 - Every domain GET, and every domain action other than the public sign-up and sign-in, requires `auth.api.getSession`. The app layout is not the boundary. The Better Auth `nextCookies()` plug remains the cookie session adapter, so the existing session cookies keep working inside actions and route handlers.
 - Better Auth's `/api/auth/[...all]` handler keeps its path, methods, and public sign-up/sign-in split. As of ADR-0003 it builds the auth system on first request rather than at import. Sign-up and sign-in stay public; sign-out requires a session and redirects on success.
-- Role permissions and a role matrix are deferred (#30). Session presence is the only authorization rule in this migration; the existing role-aware UI is unchanged.
-- Session user IDs populate existing `createdById`, `recordedById`, and `orderedById` fields where the model supports them.
+- Role permissions are required at this boundary as of [ADR 0005](0005-role-permissions-at-the-read-and-write-boundary.md): a read route answers `403` and a command returns the `FORBIDDEN` failure. The role-aware interface — hiding navigation and controls a role cannot use — is still deferred; the boundary is the control either way.
+- Session user IDs populate existing `createdById`, `updatedById`, `recordedById`, and `orderedById` fields where the model supports them. What the schema cannot yet record — who registered a patient, who booked an appointment, who archived or restored anything — is specified in [ADR 0006](0006-attribution-and-archive-history.md).
 
 ## Action surface
 
@@ -33,11 +35,11 @@ Retain and reshape the current action modules, and add domain modules for the wr
 | Module                                   | Commands                                                                                                      |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `src/app/actions/auth-actions.ts`        | `signUp`, `signIn`, session-aware `signOut`                                                                   |
-| `src/app/actions/patient-actions.ts`     | `createPatient`, `updatePatient`, `deletePatient` (archives the patient); remove the unused `getPatient` read |
-| `src/app/actions/visit-actions.ts`       | `createVisit` (including check-in), `updateVisit`, `checkoutVisit`, `deleteVisit`                             |
-| `src/app/actions/appointment-actions.ts` | `createAppointment`, `updateAppointment`, `deleteAppointment`, `checkInAppointment`                           |
-| `src/app/actions/vitals-actions.ts`      | `addVitals`, `deleteVitals`                                                                                   |
-| `src/app/actions/order-actions.ts`       | create and delete commands for lab, imaging, and medication orders                                            |
+| `src/app/actions/patient-actions.ts`     | `createPatient`, `updatePatient`, `archivePatient`; remove the unused `getPatient` read |
+| `src/app/actions/visit-actions.ts`       | `createVisit` (including check-in), `updateVisit`, `checkoutVisit`, `archiveVisit`                            |
+| `src/app/actions/appointment-actions.ts` | `createAppointment`, `updateAppointment`, `archiveAppointment`, `checkInAppointment`                          |
+| `src/app/actions/vitals-actions.ts`      | `addVitals`, `archiveVitals`                                                                                   |
+| `src/app/actions/order-actions.ts`       | request and archive commands for lab, imaging, and medication orders                                          |
 
 Every command validates its input, treats the resource path ID as authoritative, verifies nested-resource ownership, rejects clinical writes to a visit or its children after checkout, populates supported actor fields, and returns a discriminated success/error result. Form commands may redirect on success; redirects must not be caught as ordinary failures. Failures use stable codes/messages and never expose raw database errors.
 
@@ -98,7 +100,7 @@ Behaviour this migration deliberately leaves alone, and the backlog issue that n
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | ~~Calendar drag/resize, file and attachment workflows, date and time-zone handling, measurement units, and the appointment check-in link direction in the schema~~ — decided in [ADR 0004](0004-clinic-time-zone-and-read-only-calendar.md): the calendar reads only, attachments stay unsupported, the clinic zone owns every wall clock, units are one catalogue, and `Visit.appointmentId` is the canonical check-in link | #28 (resolved) |
 | ~~Patient discovery and reporting redesigns~~ — decided by #29: one patient list read carrying a search filter and a total count, and a real report read behind `/api/patients/reports`. Archived patients are excluded from the list, the search, and every clinical figure on the report, per [ADR 0002](0002-archive-deleted-clinical-records.md); the report's one archive panel counts archival events inside the period rather than reading archived clinical data | #29 (resolved) |
-| Role permissions, audit, restore/undelete, and the `Delete` label terminology                                                                                                                                                                                                                                                                                                                                                | #30            |
+| ~~Role permissions, audit, restore/undelete, and the `Delete` label terminology~~ — decided by #30: the permission matrix at the read and write boundary in [ADR 0005](0005-role-permissions-at-the-read-and-write-boundary.md), the restore lifecycle and the “Archive” label in [ADR 0002](0002-archive-deleted-clinical-records.md), and the attribution requirement plus its gaps in [ADR 0006](0006-attribution-and-archive-history.md). Two follow-ups remain: the archive history migration, and the interface that makes a role's capabilities and the archive visible | #30 (resolved) |
 
 ## Test seams
 

@@ -94,9 +94,9 @@ export async function updatePatient(
 
 /**
  * Archives a patient. Archiving an already archived patient is idempotent, so
- * a retried delete does not report a failure for work that is already done.
+ * a retried archive does not report a failure for work that is already done.
  */
-export async function deletePatient(
+export async function archivePatient(
   patientId: string
 ): Promise<ActionResult<PatientArchiveResult>> {
   const actor = await authorize(PERMISSIONS.PATIENTS_ARCHIVE);
@@ -133,7 +133,7 @@ export async function deletePatient(
  * Reverses an archive: the patient returns to the panel, the list, and search.
  *
  * The archive is a record keeping, not a state a patient can be trapped in, so
- * restoring is a command of its own rather than an absence of a delete. It is
+ * restoring is a command of its own rather than the absence of one. It is
  * idempotent — a patient who is already active is not a failure, it is the
  * outcome the caller wanted — and it restores the patient alone: an archived
  * visit stays archived until it is restored in turn, so an archive is unwound

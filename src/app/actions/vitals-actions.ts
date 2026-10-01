@@ -8,7 +8,7 @@ import {
 } from "@/lib/action-result";
 import { visitPage } from "@/server/visits/contract";
 import {
-  deleteVitals as deleteVitalsCommand,
+  archiveVitals as archiveVitalsCommand,
   recordVitals as recordVitalsCommand,
   type VitalsArchiveResult,
   type VitalsWriteResult,
@@ -64,11 +64,11 @@ export async function addVitals(
  * Archiving vitals is a button rather than a form submission: it reports the
  * archive so the caller can invalidate the reads it changed.
  */
-export async function deleteVitals(
+export async function archiveVitals(
   visitId: string,
   vitalsId: string,
 ): Promise<ActionResult<VitalsArchiveResult>> {
-  const result = await deleteVitalsCommand(visitId, vitalsId);
+  const result = await archiveVitalsCommand(visitId, vitalsId);
 
   if (!result.ok) return result;
 

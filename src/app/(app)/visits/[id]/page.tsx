@@ -26,11 +26,11 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import { checkoutVisit } from "@/app/actions/visit-actions";
-import { deleteVitals } from "@/app/actions/vitals-actions";
+import { archiveVitals as archiveVitalsAction } from "@/app/actions/vitals-actions";
 import {
-  deleteImagingOrder,
-  deleteLabOrder,
-  deleteMedicationOrder,
+  archiveImagingOrder,
+  archiveLabOrder,
+  archiveMedicationOrder,
 } from "@/app/actions/order-actions";
 import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
 import type { VisitDetailDto } from "@/server/visits/dto";
@@ -41,9 +41,9 @@ import {
 
 /** The kinds of order a visit holds, and the name each is reported under. */
 const ORDER_KINDS = {
-  lab: { archive: deleteLabOrder, label: "Lab" },
-  imaging: { archive: deleteImagingOrder, label: "Imaging" },
-  medication: { archive: deleteMedicationOrder, label: "Medication" },
+  lab: { archive: archiveLabOrder, label: "Lab" },
+  imaging: { archive: archiveImagingOrder, label: "Imaging" },
+  medication: { archive: archiveMedicationOrder, label: "Medication" },
 } as const;
 
 type OrderKind = keyof typeof ORDER_KINDS;
@@ -118,10 +118,10 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     });
   };
 
-  // "Delete" on an order means the order leaves this visit's clinical reads, so
+  // "Archive" on an order means the order leaves this visit's clinical reads, so
   // it reports the archive and the visit is re-read rather than reloaded.
   const archiveOrder = (visitId: string, kind: OrderKind, orderId: string) => {
-    if (!confirm("Are you sure you want to delete this order?")) return;
+    if (!confirm("Are you sure you want to archive this order?")) return;
 
     startArchivingOrder(async () => {
       const result = await ORDER_KINDS[kind].archive(visitId, orderId);
@@ -132,15 +132,15 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
       }
 
       await invalidateVisitWrites(queryClient, visitId);
-      toast.success(`${ORDER_KINDS[kind].label} order deleted`);
+      toast.success(`${ORDER_KINDS[kind].label} order archived`);
     });
   };
 
   const archiveVitals = (visit: VisitDetailDto, vitalsId: string) => {
-    if (!confirm("Are you sure you want to delete these vitals?")) return;
+    if (!confirm("Are you sure you want to archive these vitals?")) return;
 
     startArchivingVitals(async () => {
-      const result = await deleteVitals(visit.id, vitalsId);
+      const result = await archiveVitalsAction(visit.id, vitalsId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -148,7 +148,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
       }
 
       await invalidateVisitWrites(queryClient, visit.id);
-      toast.success("Vitals deleted");
+      toast.success("Vitals archived");
     });
   };
 
@@ -346,7 +346,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                       archiveOrder(visit.id, "lab", labOrder.id)
                                     }
                                   >
-                                    Delete
+                                    Archive
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -399,7 +399,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                       )
                                     }
                                   >
-                                    Delete
+                                    Archive
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -450,7 +450,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                       )
                                     }
                                   >
-                                    Delete
+                                    Archive
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -521,7 +521,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                       archiveVitals(visit, vital.id)
                                     }
                                   >
-                                    Delete
+                                    Archive
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>

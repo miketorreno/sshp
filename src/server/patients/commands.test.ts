@@ -15,7 +15,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   createPatient,
-  deletePatient,
+  archivePatient,
   restorePatient,
   updatePatient,
   type PatientInput,
@@ -138,7 +138,7 @@ describe("patient write commands", () => {
     const results = await Promise.all([
       createPatient({ ...INPUT, email: "new@clinic.test" }),
       updatePatient("patient-1", INPUT),
-      deletePatient("patient-1"),
+      archivePatient("patient-1"),
     ]);
 
     for (const result of results) {
@@ -154,7 +154,7 @@ describe("patient write commands", () => {
 
     await expect(createPatient(INPUT)).resolves.toEqual(forbidden);
     await expect(updatePatient("patient-1", INPUT)).resolves.toEqual(forbidden);
-    await expect(deletePatient("patient-1")).resolves.toEqual(forbidden);
+    await expect(archivePatient("patient-1")).resolves.toEqual(forbidden);
 
     expect(table.rows[0]).toEqual(ada);
   });
@@ -293,7 +293,7 @@ describe("patient write commands", () => {
 
   describe("delete", () => {
     it("archives the patient instead of destroying it", async () => {
-      const result = await deletePatient("patient-1");
+      const result = await archivePatient("patient-1");
 
       expect(result.ok).toBe(true);
       expect(table.destroyed).toEqual([]);
@@ -307,7 +307,7 @@ describe("patient write commands", () => {
     });
 
     it("keeps the patient identity reserved after archiving", async () => {
-      await deletePatient("patient-1");
+      await archivePatient("patient-1");
 
       const result = await createPatient({
         ...INPUT,
@@ -325,7 +325,7 @@ describe("patient write commands", () => {
     });
 
     it("is idempotent for an already archived patient", async () => {
-      const result = await deletePatient(archivedAda.id);
+      const result = await archivePatient(archivedAda.id);
 
       expect(result).toEqual({
         ok: true,
@@ -338,7 +338,7 @@ describe("patient write commands", () => {
     });
 
     it("reports an unknown patient as not found", async () => {
-      await expect(deletePatient("patient-404")).resolves.toEqual(notFound);
+      await expect(archivePatient("patient-404")).resolves.toEqual(notFound);
       expect(table.destroyed).toEqual([]);
     });
   });

@@ -23,7 +23,7 @@ import {
 } from "@/server/visits/test-support/seed";
 import {
   recordVitals,
-  deleteVitals,
+  archiveVitals,
   restoreVitals,
   type VitalsInput,
 } from "@/server/visits/vitals-commands";
@@ -133,7 +133,7 @@ describe("vitals commands", () => {
     it("refuses a write with no session", async () => {
       getSession.mockResolvedValue(null);
 
-      await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.UNAUTHENTICATED },
       });
@@ -142,7 +142,7 @@ describe("vitals commands", () => {
     it("answers not found if the visit or vitals do not belong together", async () => {
       seed({ vitals: [vitals({ id: "vitals-2", visitId: "visit-other" })] });
 
-      await expect(deleteVitals("visit-1", "vitals-2")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-2")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.NOT_FOUND },
       });
@@ -154,7 +154,7 @@ describe("vitals commands", () => {
         vitals: [vitals()],
       });
 
-      await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -163,7 +163,7 @@ describe("vitals commands", () => {
     it("archives the vitals rather than destroying them", async () => {
       seed({ vitals: [vitals()] });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
       const v = table.vitals.find((r) => r.id === "vitals-1");
@@ -175,7 +175,7 @@ describe("vitals commands", () => {
       const archivedAt = new Date("2026-02-01T00:00:00.000Z");
       seed({ vitals: [vitals({ deletedAt: archivedAt })] });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
       expect(table.vitals.find((r) => r.id === "vitals-1")?.deletedAt).toEqual(
@@ -190,7 +190,7 @@ describe("vitals commands", () => {
         vitals: [vitals({ deletedAt: archivedAt })],
       });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({
         ok: false,
@@ -277,7 +277,7 @@ describe("roles", () => {
     getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
     seed({ vitals: [vitals()] });
 
-    await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+    await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
       ok: false,
       error: { code: FAILURE_CODES.FORBIDDEN },
     });

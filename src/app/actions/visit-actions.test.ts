@@ -20,7 +20,7 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 import {
   checkoutVisit,
   createVisit,
-  deleteVisit,
+  archiveVisit,
   updateVisit,
 } from "@/app/actions/visit-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
@@ -69,7 +69,7 @@ describe("visit form commands", () => {
       signedOut,
     );
     await expect(checkoutVisit("visit-1")).resolves.toEqual(signedOut);
-    await expect(deleteVisit("visit-1")).resolves.toEqual(signedOut);
+    await expect(archiveVisit("visit-1")).resolves.toEqual(signedOut);
 
     expect(table.visits).toEqual([visit()]);
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -166,7 +166,7 @@ describe("visit form commands", () => {
 
   describe("archive", () => {
     it("archives the visit and reports it, so the client can invalidate", async () => {
-      const result = await deleteVisit("visit-1");
+      const result = await archiveVisit("visit-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")?.deletedAt).toBeInstanceOf(Date);

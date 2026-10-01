@@ -18,7 +18,7 @@ import { withClinicTimeZone } from "@/lib/test-support/clinic-time";
 import {
   checkInAppointment,
   createAppointment,
-  deleteAppointment,
+  archiveAppointment,
   restoreAppointment,
   updateAppointment,
   type AppointmentEdit,
@@ -172,7 +172,7 @@ describe("appointment write commands", () => {
     const results = await Promise.all([
       createAppointment({ ...INPUT, patientId: "patient-1" }),
       updateAppointment("appointment-1", EDIT),
-      deleteAppointment("appointment-1"),
+      archiveAppointment("appointment-1"),
       checkInAppointment("appointment-1"),
     ]);
 
@@ -325,7 +325,7 @@ describe("appointment write commands", () => {
 
   describe("delete", () => {
     it("archives the appointment instead of destroying it", async () => {
-      const result = await deleteAppointment("appointment-1");
+      const result = await archiveAppointment("appointment-1");
 
       expect(result.ok).toBe(true);
       expect(table.destroyed).toEqual([]);
@@ -343,13 +343,13 @@ describe("appointment write commands", () => {
     });
 
     it("takes the appointment out of the normal reads", async () => {
-      await deleteAppointment("appointment-1");
+      await archiveAppointment("appointment-1");
 
       await expect(getAppointmentDetail("appointment-1")).resolves.toBeNull();
     });
 
     it("is idempotent for an already archived appointment", async () => {
-      const result = await deleteAppointment(ARCHIVED.id);
+      const result = await archiveAppointment(ARCHIVED.id);
 
       expect(result).toEqual({
         ok: true,
@@ -362,7 +362,7 @@ describe("appointment write commands", () => {
     });
 
     it("reports an unknown appointment as not found", async () => {
-      await expect(deleteAppointment("appointment-404")).resolves.toEqual(
+      await expect(archiveAppointment("appointment-404")).resolves.toEqual(
         notFound
       );
       expect(table.destroyed).toEqual([]);
@@ -535,7 +535,7 @@ describe("appointment write commands", () => {
       for (const result of [
         await createAppointment({ ...INPUT, patientId: "patient-1" }),
         await updateAppointment("appointment-1", EDIT),
-        await deleteAppointment("appointment-1"),
+        await archiveAppointment("appointment-1"),
         await checkInAppointment("appointment-1"),
       ]) {
         expect(result).toMatchObject({

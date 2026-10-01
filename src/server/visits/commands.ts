@@ -139,9 +139,9 @@ export async function checkoutVisit(
 
 /**
  * Archives a visit. Archiving an already archived visit is idempotent, so a
- * retried delete does not report a failure for work that is already done.
+ * retried archive does not report a failure for work that is already done.
  */
-export async function deleteVisit(
+export async function archiveVisit(
   visitId: string,
 ): Promise<ActionResult<VisitArchiveResult>> {
   const actor = await authorize(PERMISSIONS.VISITS_ARCHIVE);

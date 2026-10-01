@@ -18,9 +18,9 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import {
-  deleteImagingOrder,
-  deleteLabOrder,
-  deleteMedicationOrder,
+  archiveImagingOrder,
+  archiveLabOrder,
+  archiveMedicationOrder,
   requestImagingOrder,
   requestLabOrder,
   requestMedicationOrder,
@@ -99,14 +99,14 @@ describe("order form commands", () => {
     await expect(requestMedicationOrder(medicationForm())).resolves.toEqual(
       signedOut,
     );
-    await expect(deleteLabOrder("visit-1", "lab-order-1")).resolves.toEqual(
+    await expect(archiveLabOrder("visit-1", "lab-order-1")).resolves.toEqual(
       signedOut,
     );
     await expect(
-      deleteImagingOrder("visit-1", "imaging-order-1"),
+      archiveImagingOrder("visit-1", "imaging-order-1"),
     ).resolves.toEqual(signedOut);
     await expect(
-      deleteMedicationOrder("visit-1", "med-order-1"),
+      archiveMedicationOrder("visit-1", "med-order-1"),
     ).resolves.toEqual(signedOut);
 
     expect(table.labOrders[0]?.deletedAt).toBeNull();
@@ -230,7 +230,7 @@ describe("order form commands", () => {
     });
 
     await expect(
-      deleteLabOrder("visit-1", "lab-order-2"),
+      archiveLabOrder("visit-1", "lab-order-2"),
     ).resolves.toMatchObject({
       ok: false,
       error: { code: FAILURE_CODES.NOT_FOUND },
@@ -240,13 +240,13 @@ describe("order form commands", () => {
 
   it("archives each order and reports it, so the visit read can be invalidated", async () => {
     await expect(
-      deleteLabOrder("visit-1", "lab-order-1"),
+      archiveLabOrder("visit-1", "lab-order-1"),
     ).resolves.toMatchObject({ ok: true, data: { id: "lab-order-1" } });
     await expect(
-      deleteImagingOrder("visit-1", "imaging-order-1"),
+      archiveImagingOrder("visit-1", "imaging-order-1"),
     ).resolves.toMatchObject({ ok: true, data: { id: "imaging-order-1" } });
     await expect(
-      deleteMedicationOrder("visit-1", "med-order-1"),
+      archiveMedicationOrder("visit-1", "med-order-1"),
     ).resolves.toMatchObject({ ok: true, data: { id: "med-order-1" } });
 
     expect(table.findLabOrder("lab-order-1")?.deletedAt).toBeInstanceOf(Date);

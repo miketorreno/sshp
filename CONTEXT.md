@@ -49,8 +49,16 @@ A record that is not archived and is available to normal clinical reads. It can 
 _Avoid_: Live record, current row
 
 **Archived record**:
-A record retained for history but excluded from normal clinical reads. Archived patients are not searched, listed, or counted as seen; a search that finds nothing may have missed exactly that.
+A record retained for history but excluded from normal clinical reads. Archived patients are not searched, listed, or counted as seen; a search that finds nothing may have missed exactly that. Archiving is what the interface calls it: the person taking a record out of the way keeps it, so nothing here is deleted.
 _Avoid_: Deleted, removed, hidden row
+
+**Restored record**:
+An archived record brought back by an administrator, which is active again and reads as it did before it was archived. Restoring is its own command, not the absence of an archive, and it clears nothing else: a restored visit keeps the checkout it already had.
+_Avoid_: Undelete, undeleted, resurrected
+
+**Archive lifecycle**:
+Archive and restore as one decision pair, unwound from the top down. A visit under an archived patient, or a reading under an archived visit, stays archived until what holds it up is restored first, so the archive is never half-reversed.
+_Avoid_: Soft delete, cascade restore
 
 **Search term**:
 What a reader typed to find a patient. It is a filter on the list read rather than a read of its own, so its results are a page of the list and carry the same total the list reports.
@@ -75,3 +83,11 @@ _Avoid_: API object, JSON payload
 **Write command**:
 An authenticated instruction to create or change a clinical record.
 _Avoid_: Mutation, POST request
+
+**Permission**:
+A named capability a read or a write asks for before it reaches the database, such as `patients:write`. Capabilities are named for what they allow, never for the role that holds them, so a read states what it needs and the matrix decides who has it.
+_Avoid_: Role check, ACL entry, feature flag
+
+**Role**:
+What a person's account is for at the clinic — doctor, nurse, receptionist, administrator — which maps to a set of permissions. A role holds capabilities; it is not itself the permission a command asks for. An account whose role the app does not know, or which is deactivated, holds nothing.
+_Avoid_: Permission, access level, job title

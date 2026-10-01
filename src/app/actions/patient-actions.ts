@@ -10,7 +10,7 @@ import {
 import { PATIENT_PAGES } from "@/server/patients/contract";
 import {
   createPatient as createPatientCommand,
-  deletePatient as deletePatientCommand,
+  archivePatient as archivePatientCommand,
   updatePatient as updatePatientCommand,
   type PatientArchiveResult,
   type PatientWriteResult,
@@ -68,10 +68,10 @@ export async function updatePatient(
  * Archiving is not a form submission, so it reports instead of redirecting: the
  * caller stays where it is and invalidates the reads the archive changed.
  */
-export async function deletePatient(
+export async function archivePatient(
   patientId: string,
 ): Promise<ActionResult<PatientArchiveResult>> {
-  const result = await deletePatientCommand(patientId);
+  const result = await archivePatientCommand(patientId);
 
   if (!result.ok) return result;
 

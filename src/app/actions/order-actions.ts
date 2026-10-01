@@ -117,7 +117,7 @@ async function requestOrder<Input>(
  * Archiving an order is a button rather than a form submission: it reports the
  * archive so the caller can invalidate the reads it changed.
  */
-export async function deleteLabOrder(
+export async function archiveLabOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
@@ -126,7 +126,7 @@ export async function deleteLabOrder(
   return revalidated(result, visitId);
 }
 
-export async function deleteImagingOrder(
+export async function archiveImagingOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
@@ -135,7 +135,7 @@ export async function deleteImagingOrder(
   return revalidated(result, visitId);
 }
 
-export async function deleteMedicationOrder(
+export async function archiveMedicationOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {

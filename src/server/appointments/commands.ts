@@ -112,10 +112,10 @@ export async function updateAppointment(
 
 /**
  * Archives an appointment. Archiving an already archived appointment is
- * idempotent, so a retried delete does not report a failure for work that is
+ * idempotent, so a retried archive does not report a failure for work that is
  * already done.
  */
-export async function deleteAppointment(
+export async function archiveAppointment(
   appointmentId: string
 ): Promise<ActionResult<AppointmentArchiveResult>> {
   const actor = await authorize(PERMISSIONS.APPOINTMENTS_ARCHIVE);

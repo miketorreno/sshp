@@ -5,7 +5,7 @@ import { Loader2, MoreHorizontal, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { deletePatient } from "@/app/actions/patient-actions";
+import { archivePatient as archivePatientAction } from "@/app/actions/patient-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -89,7 +89,7 @@ const AllPatientsPage = () => {
 
   const archivePatient = (patientId: string) => {
     startArchiving(async () => {
-      const result = await deletePatient(patientId);
+      const result = await archivePatientAction(patientId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -215,7 +215,7 @@ const AllPatientsPage = () => {
                               disabled={isArchiving}
                               onClick={() => archivePatient(patient.id)}
                             >
-                              Delete
+                              Archive
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

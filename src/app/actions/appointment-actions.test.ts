@@ -32,7 +32,7 @@ vi.mock("next/navigation", () => ({
 import {
   checkInAppointment,
   createAppointment,
-  deleteAppointment,
+  archiveAppointment,
   updateAppointment,
 } from "@/app/actions/appointment-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
@@ -129,7 +129,7 @@ describe("appointment form commands", () => {
     await expect(
       updateAppointment(appointmentForm({ id: "appointment-1" }))
     ).resolves.toEqual(signedOut);
-    await expect(deleteAppointment("appointment-1")).resolves.toEqual(
+    await expect(archiveAppointment("appointment-1")).resolves.toEqual(
       signedOut
     );
     await expect(checkInAppointment("appointment-1")).resolves.toEqual(
@@ -296,9 +296,9 @@ describe("appointment form commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the appointment and reports it, so the client can invalidate", async () => {
-      const result = await deleteAppointment("appointment-1");
+      const result = await archiveAppointment("appointment-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "appointment-1" } });
       expect(revalidatePath).toHaveBeenCalledWith("/appointments/all");
@@ -307,7 +307,7 @@ describe("appointment form commands", () => {
     });
 
     it("never deletes the appointment row", async () => {
-      await deleteAppointment("appointment-1");
+      await archiveAppointment("appointment-1");
 
       expect(table.destroyed).toEqual([]);
       expect(table.findAppointment("appointment-1")?.deletedAt).toBeInstanceOf(

@@ -14,7 +14,7 @@ import {
 import {
   checkInAppointment as checkInAppointmentCommand,
   createAppointment as createAppointmentCommand,
-  deleteAppointment as deleteAppointmentCommand,
+  archiveAppointment as archiveAppointmentCommand,
   updateAppointment as updateAppointmentCommand,
   type AppointmentArchiveResult,
   type AppointmentWriteResult,
@@ -84,10 +84,10 @@ export async function updateAppointment(
  * Archiving is not a form submission, so it reports instead of redirecting: the
  * caller stays where it is and invalidates the reads the archive changed.
  */
-export async function deleteAppointment(
+export async function archiveAppointment(
   appointmentId: string,
 ): Promise<ActionResult<AppointmentArchiveResult>> {
-  const result = await deleteAppointmentCommand(appointmentId);
+  const result = await archiveAppointmentCommand(appointmentId);
 
   if (!result.ok) return result;
 
