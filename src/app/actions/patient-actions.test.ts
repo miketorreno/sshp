@@ -185,10 +185,13 @@ describe("patient form commands", () => {
         placeOfBirth: null,
         referredDate: new Date("1816-01-02T00:00:00.000Z"),
       });
-      expect(revalidatePath).toHaveBeenCalledWith("/patients/all");
-      expect(redirect).toHaveBeenCalledWith(
-        `/patients/${created?.id}`
-      );
+      // Both server-rendered paths, because every report panel is derived from
+      // the rows this write just changed.
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+      ]);
+      expect(redirect).toHaveBeenCalledWith(`/patients/${created?.id}`);
     });
   });
 
@@ -236,7 +239,10 @@ describe("patient form commands", () => {
         expect(Number.isNaN(Date.parse(result.data.archivedAt))).toBe(false);
       }
 
-      expect(revalidatePath).toHaveBeenCalledWith("/patients/all");
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+      ]);
       expect(redirect).not.toHaveBeenCalled();
     });
 

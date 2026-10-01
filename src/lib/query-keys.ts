@@ -1,5 +1,8 @@
 import type { AppointmentListQuery } from "@/server/appointments/contract";
-import type { PatientListQuery } from "@/server/patients/contract";
+import type {
+  PatientListQuery,
+  PatientReportPeriod,
+} from "@/server/patients/contract";
 import type { VisitListQuery } from "@/server/visits/contract";
 
 /**
@@ -10,13 +13,20 @@ import type { VisitListQuery } from "@/server/visits/contract";
 
 export const queryKeys = {
   patients: {
+    /**
+     * One key per page *and* per search term. Search is a filter on the list read
+     * rather than a read of its own, so its key is the list key with the term in
+     * it: a search result is a page of the list, and the two can never disagree
+     * about which patient a page holds.
+     */
     list: (query: PatientListQuery = {}) =>
       ["patients", "list", query] as const,
     lists: () => ["patients", "list"] as const,
     detail: (patientId: string) => ["patients", "detail", patientId] as const,
     admitted: () => ["patients", "admitted"] as const,
-    search: (query: string) => ["patients", "search", query] as const,
-    searches: () => ["patients", "search"] as const,
+    report: (period: PatientReportPeriod) =>
+      ["patients", "report", period] as const,
+    reports: () => ["patients", "report"] as const,
   },
   appointments: {
     list: (query: AppointmentListQuery = {}) =>

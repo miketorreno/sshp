@@ -18,6 +18,7 @@ import * as medicationRoute from "@/app/api/medications/route";
 import * as patientRoute from "@/app/api/patients/route";
 import * as patientAdmittedRoute from "@/app/api/patients/admitted/route";
 import * as patientDetailRoute from "@/app/api/patients/[id]/route";
+import * as patientReportRoute from "@/app/api/patients/reports/route";
 import * as visitRoute from "@/app/api/visits/route";
 import * as visitDetailRoute from "@/app/api/visits/[id]/route";
 
@@ -41,6 +42,7 @@ const DOMAIN_READS: Record<string, Record<string, unknown>> = {
   "patients/route.ts": patientRoute,
   "patients/[id]/route.ts": patientDetailRoute,
   "patients/admitted/route.ts": patientAdmittedRoute,
+  "patients/reports/route.ts": patientReportRoute,
   "visits/route.ts": visitRoute,
   "visits/[id]/route.ts": visitDetailRoute,
 };

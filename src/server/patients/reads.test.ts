@@ -13,11 +13,11 @@ vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { UnauthenticatedError } from "@/lib/session";
+import { MAX_LIST_LIMIT } from "@/server/patients/contract";
 import {
   getPatientDetail,
   listAdmittedPatients,
   listPatients,
-  searchPatients,
 } from "@/server/patients/reads";
 
 const SESSION = {
@@ -85,9 +85,6 @@ describe("patient reads", () => {
     getSession.mockResolvedValue(null);
 
     await expect(listPatients()).rejects.toBeInstanceOf(UnauthenticatedError);
-    await expect(searchPatients("ada")).rejects.toBeInstanceOf(
-      UnauthenticatedError
-    );
     await expect(listAdmittedPatients()).rejects.toBeInstanceOf(
       UnauthenticatedError
     );
@@ -98,7 +95,9 @@ describe("patient reads", () => {
 
   describe("list", () => {
     it("returns browser-facing summaries newest first, without archived patients", async () => {
-      await expect(listPatients()).resolves.toEqual([
+      const page = await listPatients();
+
+      expect(page.rows).toEqual([
         expect.objectContaining({
           id: "patient-1",
           patientCode: "PAT-001",
@@ -117,45 +116,79 @@ describe("patient reads", () => {
       ]);
     });
 
-    it("carries no database bookkeeping into the browser", async () => {
-      const [summary] = await listPatients();
-
-      expect(summary).not.toHaveProperty("deletedAt");
-      expect(summary).not.toHaveProperty("updatedAt");
+    it("reports the page it served and how many patients matched in total", async () => {
+      await expect(listPatients({ page: 2, limit: 1 })).resolves.toEqual({
+        rows: [expect.objectContaining({ id: "patient-2" })],
+        page: 2,
+        pageSize: 1,
+        totalCount: 2,
+      });
     });
 
-    it("serves one page at a time", async () => {
-      const first = await listPatients({ limit: 1 });
-      const second = await listPatients({ page: 2, limit: 1 });
+    it("counts every matching patient, not just the page it returned", async () => {
+      const page = await listPatients({ limit: 1 });
 
-      expect(first.map((patient) => patient.id)).toEqual(["patient-1"]);
-      expect(second.map((patient) => patient.id)).toEqual(["patient-2"]);
+      expect(page.rows).toHaveLength(1);
+      expect(page.totalCount).toBe(2);
+    });
+
+    it("carries no database bookkeeping into the browser", async () => {
+      const { rows } = await listPatients();
+
+      expect(rows[0]).not.toHaveProperty("deletedAt");
+      expect(rows[0]).not.toHaveProperty("updatedAt");
     });
 
     it("clamps paging to bounds a client cannot escape", async () => {
-      await expect(listPatients({ page: 0, limit: 5000 })).resolves.toHaveLength(
-        2
-      );
+      const page = await listPatients({ page: 0, limit: 5000 });
+
+      expect(page.rows).toHaveLength(2);
+      expect(page.page).toBe(1);
+      expect(page.pageSize).toBe(MAX_LIST_LIMIT);
     });
   });
 
   describe("search", () => {
-    it("returns nothing for an empty query", async () => {
-      await expect(searchPatients("   ")).resolves.toEqual([]);
-    });
-
     it("matches a name, an email or a patient code, ignoring case", async () => {
-      const byName = await searchPatients("LOVELACE");
-      const byEmail = await searchPatients("grace@clinic");
-      const byCode = await searchPatients("pat-002");
+      const byName = await listPatients({ search: "LOVELACE" });
+      const byEmail = await listPatients({ search: "grace@clinic" });
+      const byCode = await listPatients({ search: "pat-002" });
 
-      expect(byName.map((patient) => patient.id)).toEqual(["patient-1"]);
-      expect(byEmail.map((patient) => patient.id)).toEqual(["patient-2"]);
-      expect(byCode.map((patient) => patient.id)).toEqual(["patient-2"]);
+      expect(byName.rows.map((patient) => patient.id)).toEqual(["patient-1"]);
+      expect(byEmail.rows.map((patient) => patient.id)).toEqual(["patient-2"]);
+      expect(byCode.rows.map((patient) => patient.id)).toEqual(["patient-2"]);
     });
 
-    it("never offers an archived patient", async () => {
-      await expect(searchPatients("alan")).resolves.toEqual([]);
+    it("counts the matches, so a page reports how many there are", async () => {
+      const page = await listPatients({ search: "clinic.test" });
+
+      expect(page.totalCount).toBe(2);
+    });
+
+    it("never offers an archived patient, nor counts one", async () => {
+      const page = await listPatients({ search: "alan" });
+
+      expect(page.rows).toEqual([]);
+      expect(page.totalCount).toBe(0);
+    });
+
+    it("treats an untouched search box as no search rather than as no matches", async () => {
+      const page = await listPatients({ search: "   " });
+
+      expect(page.totalCount).toBe(2);
+    });
+
+    it("pages through the matches rather than stopping at a fixed ceiling", async () => {
+      const first = await listPatients({ search: "clinic.test", limit: 1 });
+      const second = await listPatients({
+        search: "clinic.test",
+        limit: 1,
+        page: 2,
+      });
+
+      expect(first.rows.map((patient) => patient.id)).toEqual(["patient-1"]);
+      expect(second.rows.map((patient) => patient.id)).toEqual(["patient-2"]);
+      expect(second.totalCount).toBe(2);
     });
   });
 

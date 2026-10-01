@@ -49,12 +49,24 @@ A record that is not archived and is available to normal clinical reads. It can 
 _Avoid_: Live record, current row
 
 **Archived record**:
-A record retained for history but excluded from normal clinical reads.
+A record retained for history but excluded from normal clinical reads. Archived patients are not searched, listed, or counted as seen; a search that finds nothing may have missed exactly that.
 _Avoid_: Deleted, removed, hidden row
+
+**Search term**:
+What a reader typed to find a patient. It is a filter on the list read rather than a read of its own, so its results are a page of the list and carry the same total the list reports.
+_Avoid_: Query, search endpoint, lookup
+
+**Total count**:
+How many rows a list read holds across every page, as distinct from the rows of the page in hand. Paging needs both: the rows to draw and the count to know whether another page exists.
+_Avoid_: Row count, result length
 
 **Inactive record**:
 A record that is not itself archived but is excluded from normal clinical reads because an ancestor record is archived.
 _Avoid_: Archived, deleted
+
+**Reporting period**:
+A length of time a report reaches back from now, such as the last thirty days. It is a trailing window rather than a calendar one, and the report names the exact instants it counted.
+_Avoid_: Calendar period (a period is not a named calendar unit), date range
 
 **Read model**:
 A stable shape of a patient, visit, appointment, or order that staff-facing screens consume.

@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/popover";
 import { useEffect, useId, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { usePatientSearch } from "@/client/patients/queries";
+import { usePatientList } from "@/client/patients/queries";
+import {
+  COMBOBOX_PAGE_SIZE,
+  PATIENT_SEARCH_DEBOUNCE_MS,
+} from "@/server/patients/contract";
 import type { PatientSummaryDto } from "@/server/patients/dto";
 
 interface PatientComboboxProps {
@@ -41,10 +45,20 @@ export function PatientCombobox({
     if (defaultValue) setSelectedPatient(defaultValue);
   }, [defaultValue?.id]);
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedQuery = useDebouncedValue(searchQuery.trim());
+  const debouncedQuery = useDebouncedValue(
+    searchQuery.trim(),
+    PATIENT_SEARCH_DEBOUNCE_MS,
+  );
 
-  const { isFetching, isError, error, data: patients } =
-    usePatientSearch(debouncedQuery);
+  // One page of the list read, filtered by the term. The dropdown shows what fits
+  // in it, so the read asks for exactly that many rows: a patient past the eighth
+  // match is reachable by typing more, not by scrolling a dropdown that has no
+  // pager. An untouched term asks for nobody, because showing a random page of
+  // patients before anyone has typed is not a search anyone made.
+  const { isFetching, isError, error, data: matches } = usePatientList(
+    { search: debouncedQuery, limit: COMBOBOX_PAGE_SIZE },
+    { enabled: debouncedQuery.length > 0 },
+  );
   const isSearching = debouncedQuery.length > 0;
   const triggerId = useId();
 
@@ -91,12 +105,12 @@ export function PatientCombobox({
                 </p>
               )}
 
-              {!isFetching && isSearching && !patients?.length && (
+              {!isFetching && isSearching && !matches?.rows.length && (
                 <CommandEmpty>No patient found.</CommandEmpty>
               )}
 
               <CommandGroup>
-                {patients?.map((patient) => (
+                {matches?.rows.map((patient) => (
                   <CommandItem
                     key={patient.id}
                     value={patient.id}

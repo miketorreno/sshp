@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-09-25
-amended: 2026-09-26
+amended: 2026-10-01
 ---
 
 # Authenticated read routes and write actions
@@ -13,6 +13,8 @@ The app will use authenticated GET route handlers for browser reads and authenti
 > Amended 2026-09-26 by ADR-0004: the time-zone rule this document deferred to #28 is now settled in ADR-0004. The `visits:list` date window is a window in the clinic's zone, not in the server's, and the appointment list read takes an optional window and search that the calendar and the table use respectively.
 >
 > Amended 2026-09-26 at the end of the migration: the deferred-scope table below records which backlog issue owns each behaviour this decision left alone, and the pre-migration ambient domain interfaces are deleted.
+>
+> Amended 2026-10-01 by #29: the patient search this document gave its own key and `?query=` parameter is gone. Search is a filter on the patient list read (`?search=`), the patient list answers with a total count, and `/api/patients/reports` is added as a read. The combobox is the first consumer of the filtered list, and patient writes revalidate both the list and report pages.
 >
 > Amended 2026-09-26 by ADR-0003: the `/api/auth/[...all]` handler below is no longer unchanged — it now builds the auth system on first request rather than at import, which is the only way to keep it out of the build. Its path, methods, and public/unauthenticated split are unchanged. ADR-0003 also carves an exception out of the test seams below: proving a module builds nothing while being imported means mocking the client, so `src/lib/prisma.test.ts` and `src/lib/auth.test.ts` stand in for Prisma and Better Auth.
 
@@ -47,9 +49,10 @@ Each write calls `revalidatePath` for any affected server-rendered path; that is
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/appointments`      | Authenticated appointment list DTO; `POST` is removed                                                                                                                       |
 | `/api/appointments/[id]` | Authenticated appointment detail DTO; `PUT` and `DELETE` are removed                                                                                                        |
-| `/api/patients`          | Authenticated patient list DTO with existing page/limit parameters; `POST` is removed; the same GET accepts `query` for patient search                                      |
+| `/api/patients`          | Authenticated patient list DTO with page/limit parameters and a `search` filter; `POST` is removed                                                                             |
 | `/api/patients/[id]`     | Authenticated patient detail DTO; `PUT` and `DELETE` are removed                                                                                                            |
 | `/api/patients/admitted` | Authenticated, patient-centric admitted-patient DTO                                                                                                                         |
+| `/api/patients/reports`  | Authenticated patient report DTO for a reporting period; added by #29                                                                                                       |
 | `/api/visits`            | Canonical authenticated visit-list DTO with a date-window and visit-type filter; consumed by Today's Outpatients; includes the patient and provider fields the page renders |
 | `/api/visits/[id]`       | Authenticated visit-detail DTO; `PUT` and `DELETE` are removed                                                                                                              |
 | `/api/medications`       | Authenticated active medication catalogue DTO, consumed by the medication request form; added by the order slice                                                            |
@@ -59,12 +62,12 @@ Each write calls `revalidatePath` for any affected server-rendered path; that is
 
 Route reads return typed, browser-facing DTOs rather than raw Prisma shapes. The ambient domain interfaces inherited from the pre-migration codebase are deleted, including the fabricated `PatientVisit` row, which declared the orders, vitals, notes, diagnoses, and procedures that the outpatients endpoint never included; a browser-visible model is a DTO in the owning domain's `dto.ts` or a generated Prisma type. The central fetch client checks `response.ok`, maps 401/404/409/500 failures consistently, and uses a typed query-key registry:
 
-- `patients:list(filters)`, `patients:detail(id)`, `patients:admitted`, `patients:search(query)`
+- `patients:list(filters)`, `patients:detail(id)`, `patients:admitted`, `patients:report(period)`
 - `appointments:list`, `appointments:detail(id)`
 - `visits:list(filters)`, `visits:detail(id)`
 - `medications:list`
 
-`patients:search(query)` is served by `GET /api/patients?query=...`; the patient combobox is its first consumer. `medications:list` is served by `GET /api/medications` and is not invalidated by order writes, because an order changes a visit rather than the catalogue.
+Patient search is a filter on `patients:list(filters)` rather than a key of its own: a search result is a page of the list, so the term rides in the list key and the two cannot disagree about which patient a page holds. The patient list read answers with `rows`, `page`, `pageSize`, and `totalCount`, because a pager needs to know how many rows there are as well as which rows it has; other list reads keep whatever envelope they already had, and a pager given no total count falls back to inferring a next page from a full one. `medications:list` is served by `GET /api/medications` and is not invalidated by order writes, because an order changes a visit rather than the catalogue.
 
 Query keys include every filter that changes the result. The registry records the exact keys each write invalidates. Because list filters make keys distinct, a write invalidates the affected list prefix (for example every `patients:list(filters)` key) unless the change narrows to one key.
 
@@ -94,7 +97,7 @@ Behaviour this migration deliberately leaves alone, and the backlog issue that n
 | Deferred                                                                                                                                                                                                                                                                                                                                                                                                                     | Backlog        |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | ~~Calendar drag/resize, file and attachment workflows, date and time-zone handling, measurement units, and the appointment check-in link direction in the schema~~ — decided in [ADR 0004](0004-clinic-time-zone-and-read-only-calendar.md): the calendar reads only, attachments stay unsupported, the clinic zone owns every wall clock, units are one catalogue, and `Visit.appointmentId` is the canonical check-in link | #28 (resolved) |
-| Patient discovery and reporting redesigns                                                                                                                                                                                                                                                                                                                                                                                    | #29            |
+| ~~Patient discovery and reporting redesigns~~ — decided by #29: one patient list read carrying a search filter and a total count, and a real report read behind `/api/patients/reports`. Archived patients are excluded from the list, the search, and every clinical figure on the report, per [ADR 0002](0002-archive-deleted-clinical-records.md); the report's one archive panel counts archival events inside the period rather than reading archived clinical data | #29 (resolved) |
 | Role permissions, audit, restore/undelete, and the `Delete` label terminology                                                                                                                                                                                                                                                                                                                                                | #30            |
 
 ## Test seams

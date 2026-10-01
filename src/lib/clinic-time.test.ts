@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calculateAge,
+  calculateAgeAt,
   clinicTimeZone,
   endOfDay,
   formatClinicDate,
@@ -256,5 +257,35 @@ describe("age", () => {
 
   it("is zero rather than a number of nonsense for a birth date that is none", () => {
     expect(calculateAge("not a date", UTC)).toBe(0);
+  });
+
+  describe("at a given moment", () => {
+    const born = new Date("2000-06-15T00:00:00.000Z");
+
+    it("ages against the moment asked for rather than the clock", () => {
+      // Same birth date, same clinic: the report that says "as of the fifteenth"
+      // must not re-band this patient when it is re-run tomorrow.
+      expect(
+        calculateAgeAt(born, UTC, new Date("2026-06-14T23:59:59.000Z")),
+      ).toBe(25);
+      expect(
+        calculateAgeAt(born, UTC, new Date("2026-06-15T00:00:00.000Z")),
+      ).toBe(26);
+    });
+
+    it("agrees with the clock-based age at the same moment", () => {
+      expect(
+        at("2026-06-15T00:00:00.000Z", () => calculateAge(born, UTC)),
+      ).toBe(calculateAgeAt(born, UTC, new Date("2026-06-15T00:00:00.000Z")));
+    });
+
+    it("says it cannot rather than inventing an age it does not have", () => {
+      // A caller that bands patients needs to tell "no age" from "zero years
+      // old", which are different patients.
+      expect(calculateAgeAt("not a date", UTC, new Date())).toBeNull();
+      expect(
+        calculateAgeAt(born, UTC, new Date("1990-01-01T00:00:00.000Z")),
+      ).toBeNull();
+    });
   });
 });

@@ -28,6 +28,7 @@ export type PatientTable = {
         where?: Condition;
         select?: Record<string, boolean>;
       }) => Promise<Row | null>;
+      count: (args?: { where?: Condition }) => Promise<number>;
       create: (args: { data: Row }) => Promise<Row>;
       update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
       delete: (args: { where: { id: string } }) => Promise<Row>;
@@ -52,7 +53,13 @@ export function createPatientTable(
         findMany: async ({ where, orderBy, skip = 0, take, select }) => {
           const found = rows.filter((row) => matches(row, where));
 
-          for (const [field, direction] of Object.entries(orderBy ?? {})) {
+          // Sorted back to front, so the field `orderBy` declares first is the one
+          // that decides the final order — the way Prisma reads it, and the reason a
+          // tiebreaker like `id` settles rows that share a `createdAt` instead of
+          // being overridden by it.
+          const keys = Object.entries(orderBy ?? {}).reverse();
+
+          for (const [field, direction] of keys) {
             found.sort((left, right) =>
               compare(left[field], right[field], direction)
             );
@@ -62,6 +69,11 @@ export function createPatientTable(
             .slice(skip, take === undefined ? undefined : skip + take)
             .map((row) => project(row, select));
         },
+        // The count answers "how many match", which is a different question from
+        // "which ones", so it is not derived from a page: a table with two
+        // patients answers two however many rows a caller asked to see.
+        count: async ({ where } = {}) => rows.filter((row) => matches(row, where))
+          .length,
         findFirst: async ({ where, select }) => {
           const found = rows.find((row) => matches(row, where));
 
@@ -155,9 +167,37 @@ function matchesField(value: unknown, condition: unknown): boolean {
     if (condition.in !== undefined) {
       return (condition.in as unknown[]).includes(value);
     }
+
+    // Instant bounds, compared as instants so a read asking "registered since
+    // Monday, up to Friday" gets the same answer the database would. Every bound
+    // has to hold: `{ gte: start, lt: end }` is a range, and checking only the
+    // first bound would quietly admit everything after `start`, forever.
+    if (condition.gte !== undefined && time(value) < time(condition.gte)) {
+      return false;
+    }
+    if (condition.gt !== undefined && time(value) <= time(condition.gt)) {
+      return false;
+    }
+    if (condition.lte !== undefined && time(value) > time(condition.lte)) {
+      return false;
+    }
+    if (condition.lt !== undefined && time(value) >= time(condition.lt)) {
+      return false;
+    }
+
+    if (isAnyBound(condition)) return true;
   }
 
   return value === condition;
+}
+
+function isAnyBound(condition: Record<string, unknown>): boolean {
+  return (
+    condition.gte !== undefined ||
+    condition.gt !== undefined ||
+    condition.lte !== undefined ||
+    condition.lt !== undefined
+  );
 }
 
 function isFilter(condition: unknown): condition is Record<string, unknown> {

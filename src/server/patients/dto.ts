@@ -36,6 +36,22 @@ export type AdmittedPatientDto = PatientSummaryDto & {
   patientType: "INPATIENT";
 };
 
+/**
+ * One page of patients, and the whole of what was asked for.
+ *
+ * `rows` is the page. `totalCount` is every patient that matched, across every
+ * page, which is what lets a pager say "Page 2 of 7" and stop offering Next on
+ * the last one. `page` and `pageSize` are the bounds the read actually honoured
+ * after clamping, so a caller that asked for page 0 or a limit of 5000 learns
+ * which page it is looking at rather than assuming the one it sent.
+ */
+export type PatientListDto = {
+  rows: PatientSummaryDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+};
+
 export function toPatientSummary(patient: Patient): PatientSummaryDto {
   return {
     id: patient.id,

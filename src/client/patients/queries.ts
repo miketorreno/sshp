@@ -9,50 +9,72 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   patientApiPaths,
   type PatientListQuery,
+  type PatientReportPeriod,
 } from "@/server/patients/contract";
 import type {
   AdmittedPatientDto,
   PatientDetailDto,
-  PatientSummaryDto,
+  PatientListDto,
 } from "@/server/patients/dto";
+import type { PatientReportDto } from "@/server/patients/report-dto";
 
 /**
  * The browser read surface for patients. Screens ask for a read, never for a
  * transport, and a write invalidates exactly the reads it changed.
+ *
+ * Search is a filter on the list read rather than a read of its own, so there is
+ * one list query and the search term travels in its key and its path. A screen
+ * showing results therefore cannot be showing a different page of patients than
+ * the one its own page count describes.
  */
 
 export const patientQueries = {
   list: (query: PatientListQuery = {}) =>
     queryOptions({
       queryKey: queryKeys.patients.list(query),
-      queryFn: () =>
-        apiGet<PatientSummaryDto[]>(patientApiPaths.list(query)),
-    }),
-  search: (query: string) =>
-    queryOptions({
-      queryKey: queryKeys.patients.search(query),
-      queryFn: () => apiGet<PatientSummaryDto[]>(patientApiPaths.search(query)),
-      enabled: query.trim().length > 0,
+      queryFn: ({ signal }) =>
+        apiGet<PatientListDto>(patientApiPaths.list(query), { signal }),
     }),
   admitted: () =>
     queryOptions({
       queryKey: queryKeys.patients.admitted(),
-      queryFn: () => apiGet<AdmittedPatientDto[]>(patientApiPaths.admitted()),
+      queryFn: ({ signal }) =>
+        apiGet<AdmittedPatientDto[]>(patientApiPaths.admitted(), { signal }),
     }),
   detail: (patientId: string) =>
     queryOptions({
       queryKey: queryKeys.patients.detail(patientId),
-      queryFn: () => apiGet<PatientDetailDto>(patientApiPaths.detail(patientId)),
+      queryFn: ({ signal }) =>
+        apiGet<PatientDetailDto>(patientApiPaths.detail(patientId), { signal }),
+    }),
+  report: (period: PatientReportPeriod) =>
+    queryOptions({
+      queryKey: queryKeys.patients.report(period),
+      queryFn: ({ signal }) =>
+        apiGet<PatientReportDto>(patientApiPaths.report(period), { signal }),
     }),
 };
 
-export const usePatientList = (query: PatientListQuery = {}) =>
-  useQuery(patientQueries.list(query));
-
-export const usePatientSearch = (query: string) =>
-  useQuery(patientQueries.search(query));
+/**
+ * The list read. `enabled` lets a caller that is not yet asking a question hold
+ * the read back — the report, which waits on a period, and the combobox, which
+ * waits on a first keystroke.
+ *
+ * The query function receives React Query's `AbortSignal` and passes it to the
+ * request. Without it a screen that types quickly leaves a request per keystroke
+ * in flight, and they arrive out of order: the reader watches results flicker
+ * back to an earlier term. Cancelling the superseded read means only the newest
+ * term can win.
+ */
+export const usePatientList = (
+  query: PatientListQuery = {},
+  options: { enabled?: boolean } = {},
+) => useQuery({ ...patientQueries.list(query), enabled: options.enabled });
 
 export const useAdmittedPatients = () => useQuery(patientQueries.admitted());
+
+export const usePatientReport = (period: PatientReportPeriod) =>
+  useQuery(patientQueries.report(period));
 
 /**
  * One patient's detail read.
@@ -68,7 +90,7 @@ export const usePatientDetail = (patientId: string) =>
   });
 
 /**
- * A patient write can change any page of the list, every search result, the
+ * A patient write can change any page of the list, every page of the report, the
  * admitted list, and the written patient's own detail read. Nothing else.
  */
 export async function invalidatePatientWrites(
@@ -77,8 +99,8 @@ export async function invalidatePatientWrites(
 ): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.patients.lists() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.patients.searches() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.patients.admitted() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.patients.reports() }),
     queryClient.invalidateQueries({
       queryKey: queryKeys.patients.detail(patientId),
     }),

@@ -7,7 +7,7 @@ import {
   parseSubmission,
   type ActionResult,
 } from "@/lib/action-result";
-import { PATIENT_LIST_PAGE } from "@/server/patients/contract";
+import { PATIENT_PAGES } from "@/server/patients/contract";
 import {
   createPatient as createPatientCommand,
   deletePatient as deletePatientCommand,
@@ -37,7 +37,7 @@ export async function createPatient(
 
   if (!result.ok) return result;
 
-  revalidatePath(PATIENT_LIST_PAGE);
+  revalidatePatientPages();
   redirect(patientPage(result.data.id));
 }
 
@@ -60,7 +60,7 @@ export async function updatePatient(
 
   if (!result.ok) return result;
 
-  revalidatePath(PATIENT_LIST_PAGE);
+  revalidatePatientPages();
   redirect(patientPage(result.data.id));
 }
 
@@ -75,9 +75,20 @@ export async function deletePatient(
 
   if (!result.ok) return result;
 
-  revalidatePath(PATIENT_LIST_PAGE);
+  revalidatePatientPages();
 
   return result;
+}
+
+/**
+ * Revalidates every server-rendered path a patient write changed.
+ *
+ * The list because the rows changed, and the report because every panel on it is
+ * derived from those same rows — a new patient moves the totals, the new count,
+ * and the age bands at once.
+ */
+function revalidatePatientPages(): void {
+  for (const page of PATIENT_PAGES) revalidatePath(page);
 }
 
 /** Parses a patient submission, or returns the failure the form should show. */

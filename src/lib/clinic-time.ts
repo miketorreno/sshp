@@ -352,11 +352,33 @@ export function formatClinicDate(instant: Date | string, zone: string): string {
  * that has not happened yet this year has not made the person a year older.
  */
 export function calculateAge(dateOfBirth: Date | string, zone: string): number {
+  return calculateAgeAt(dateOfBirth, zone, new Date()) ?? 0;
+}
+
+/**
+ * Whole years between a birth date and a given moment, in the clinic's zone.
+ *
+ * The moment is passed rather than read from the clock so a report can age
+ * everyone against the instant it claims to be reporting on; read off the clock
+ * instead, a report re-run tomorrow would band the same patients differently
+ * while still calling the numbers the same.
+ *
+ * Off the calendar fields rather than by dividing elapsed milliseconds, so a leap
+ * year cannot hand a patient a birthday a day early. A birth date that is none,
+ * or one in the future, is null rather than a number: it means "we cannot say", and
+ * inventing an age for it would be worse than admitting the gap.
+ */
+export function calculateAgeAt(
+  dateOfBirth: Date | string,
+  zone: string,
+  on: Date,
+): number | null {
   const born = toInstant(dateOfBirth);
-  if (!born) return 0;
+
+  if (!born || born.getTime() > on.getTime()) return null;
 
   const birth = wallClockOf(born, zone);
-  const now = wallClockOf(new Date(), zone);
+  const now = wallClockOf(on, zone);
 
   const age = now.year - birth.year;
 
