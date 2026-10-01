@@ -1,6 +1,6 @@
 import { getPrisma } from "@/lib/prisma";
 import { clinicTimeZone, endOfDay, startOfDay } from "@/lib/clinic-time";
-import { requireSession } from "@/lib/session";
+import { PERMISSIONS, requirePermission } from "@/server/access";
 import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
@@ -14,8 +14,8 @@ import {
 } from "./dto";
 
 /**
- * Visit reads for staff screens. Every read requires a session, and every read
- * hides archived records: an archived visit is history, a visit whose patient is
+ * Visit reads for staff screens. Every read requires a session that holds
+ * `visits:read`, and every read hides archived records: an archived visit is history, a visit whose patient is
  * archived is inactive rather than active, and a record archived inside a visit
  * leaves the visit it was recorded during.
  */
@@ -74,7 +74,7 @@ const VISIT_DETAIL_RELATIONS = {
 export async function listVisits(
   query: VisitListQuery = {},
 ): Promise<VisitSummaryDto[]> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.VISITS_READ);
 
   const visits = await getPrisma().visit.findMany({
     where: {
@@ -94,7 +94,7 @@ export async function listVisits(
 export async function getVisitDetail(
   id: string,
 ): Promise<VisitDetailDto | null> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.VISITS_READ);
 
   const visit = await getPrisma().visit.findFirst({
     where: { id, ...ACTIVE_VISIT },

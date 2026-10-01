@@ -69,4 +69,21 @@ describe("medication read routes", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
   });
+
+  it("answers with forbidden for an account that may not read the catalogue", async () => {
+    getSession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "RECEPTIONIST" },
+    });
+
+    const response = await read();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: FAILURE_CODES.FORBIDDEN,
+        message: FAILURE_MESSAGES.FORBIDDEN,
+      },
+    });
+  });
 });

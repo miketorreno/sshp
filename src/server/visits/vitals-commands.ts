@@ -6,12 +6,13 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
-import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { PERMISSIONS, authorize } from "@/server/access";
 import { VITALS_NOT_FOUND, VITALS_VISIT_NOT_FOUND } from "./vitals-contract";
 import { VISIT_CHECKED_OUT } from "./contract";
 
 /**
- * Vitals write commands. Each command verifies the visit the path names is the
+ * Vitals write commands. Each command requires a session holding the
+ * permission its change needs, verifies the visit the path names is the
  * owner of the vitals record, that the visit is still active for an active
  * patient, that checkout has not closed the visit to clinical changes, and
  * populates the actor who recorded or removed them.
@@ -40,6 +41,12 @@ export type VitalsWriteResult = { id: string };
 
 export type VitalsArchiveResult = { id: string; archivedAt: string };
 
+/**
+ * `restoredAt` is null when the reading was already active, so a retried restore
+ * reports that there was no archive left to reverse.
+ */
+export type VitalsRestoreResult = { id: string; restoredAt: string | null };
+
 const ACTIVE_VISIT = {
   deletedAt: null,
   patient: { deletedAt: null },
@@ -48,8 +55,8 @@ const ACTIVE_VISIT = {
 export async function recordVitals(
   input: VitalsInput,
 ): Promise<ActionResult<VitalsWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VITALS_WRITE);
+  if (!actor.ok) return actor;
 
   const visit = await findActiveVisit(input.visitId);
 
@@ -60,7 +67,7 @@ export async function recordVitals(
     const created = await getPrisma().vitals.create({
       data: {
         visitId: input.visitId,
-        recordedById: session.user.id,
+        recordedById: actor.data.user.id,
         recordedAt: input.recordedAt,
         height: input.height,
         weight: input.weight,
@@ -85,8 +92,8 @@ export async function deleteVitals(
   visitId: string,
   vitalsId: string,
 ): Promise<ActionResult<VitalsArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VITALS_ARCHIVE);
+  if (!actor.ok) return actor;
 
   const visit = await findActiveVisit(visitId);
 
@@ -124,6 +131,55 @@ export async function deleteVitals(
       id: vitals.id,
       archivedAt: archivedAt.toISOString(),
     });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+/**
+ * Reverses an archive: the reading returns to the visit it was recorded against.
+ *
+ * Idempotent, like archiving is. Like archiving it also insists on the visit in
+ * the path being an active one for an active patient, so a reading cannot be
+ * restored into a visit that is itself out of the way — the archive is unwound
+ * from the top down, visit before reading.
+ *
+ * Only an administrator restores: an archive is how the clinic takes a mistake or
+ * a record it must not keep in the way, and the role that may archive a reading is
+ * not thereby trusted to bring one back.
+ */
+export async function restoreVitals(
+  visitId: string,
+  vitalsId: string,
+): Promise<ActionResult<VitalsRestoreResult>> {
+  const actor = await authorize(PERMISSIONS.VITALS_RESTORE);
+  if (!actor.ok) return actor;
+
+  const visit = await findActiveVisit(visitId);
+
+  if (!visit) return knownFailure(VITALS_VISIT_NOT_FOUND);
+
+  try {
+    // The visit in the path owns the lookup, and it ignores `deletedAt` on purpose:
+    // an archived reading is precisely the row this command is here to find.
+    const vitals = await getPrisma().vitals.findFirst({
+      where: { id: vitalsId, visitId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!vitals) return knownFailure(VITALS_NOT_FOUND);
+
+    if (!vitals.deletedAt) {
+      return actionSuccess({ id: vitals.id, restoredAt: null });
+    }
+
+    const restoredAt = new Date();
+    await getPrisma().vitals.update({
+      where: { id: vitals.id },
+      data: { deletedAt: null },
+    });
+
+    return actionSuccess({ id: vitals.id, restoredAt: restoredAt.toISOString() });
   } catch (error) {
     return writeFailure(error);
   }

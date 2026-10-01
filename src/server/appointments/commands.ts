@@ -6,7 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
-import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { PERMISSIONS, authorize } from "@/server/access";
 import type { AppointmentType, AppointmentStatus, VisitType } from "@/generated/prisma";
 import {
   APPOINTMENT_ALREADY_CHECKED_IN,
@@ -15,7 +15,8 @@ import {
 } from "./contract";
 
 /**
- * Appointment write commands. Each one requires a session, verifies the
+ * Appointment write commands. Each one requires a session holding the
+ * permission its change needs, verifies the
  * appointment it addresses is an active one for an active patient, and answers
  * with a stable result instead of throwing.
  *
@@ -39,6 +40,12 @@ export type AppointmentWriteResult = { id: string };
 
 export type AppointmentArchiveResult = { id: string; archivedAt: string };
 
+/**
+ * `restoredAt` is null when the appointment was already active, so a retried
+ * restore reports that there was no archive left to reverse.
+ */
+export type AppointmentRestoreResult = { id: string; restoredAt: string | null };
+
 export type CheckInResult = { appointmentId: string; visitId: string };
 
 const ACTIVE_APPOINTMENT = {
@@ -49,8 +56,8 @@ const ACTIVE_APPOINTMENT = {
 export async function createAppointment(
   input: AppointmentInput
 ): Promise<ActionResult<AppointmentWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_WRITE);
+  if (!actor.ok) return actor;
 
   if (!(await isActivePatient(input.patientId)))
     return knownFailure(APPOINTMENT_PATIENT_NOT_FOUND);
@@ -59,7 +66,7 @@ export async function createAppointment(
     const created = await getPrisma().appointment.create({
       data: {
         patientId: input.patientId,
-        providerId: session.user.id,
+        providerId: actor.data.user.id,
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         appointmentType: input.appointmentType,
@@ -78,8 +85,8 @@ export async function updateAppointment(
   appointmentId: string,
   input: AppointmentEdit
 ): Promise<ActionResult<AppointmentWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_WRITE);
+  if (!actor.ok) return actor;
 
   const appointment = await findActiveAppointment(appointmentId);
 
@@ -111,8 +118,8 @@ export async function updateAppointment(
 export async function deleteAppointment(
   appointmentId: string
 ): Promise<ActionResult<AppointmentArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_ARCHIVE);
+  if (!actor.ok) return actor;
 
   try {
     const appointment = await getPrisma().appointment.findFirst({
@@ -145,6 +152,57 @@ export async function deleteAppointment(
 }
 
 /**
+ * Reverses an archive: the appointment returns to the calendar, the list, and the
+ * day's schedule.
+ *
+ * Idempotent, like archiving is, so a retried restore reports the outcome the
+ * caller wanted. It restores the appointment alone. An appointment that was
+ * checked in keeps its check-in, because that is a fact about the patient rather
+ * than a consequence of the archive; a visit opened from it stays archived until
+ * it is restored in its own turn. An archived appointment therefore cannot be
+ * checked in again, since the unique index on `Visit.appointmentId` still holds
+ * the visit it opened.
+ *
+ * Only an administrator restores: an archive is how the clinic takes a mistake or
+ * a record it must not keep in the way, and the role that may archive one is not
+ * thereby trusted to bring one back.
+ */
+export async function restoreAppointment(
+  appointmentId: string
+): Promise<ActionResult<AppointmentRestoreResult>> {
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_RESTORE);
+  if (!actor.ok) return actor;
+
+  try {
+    // The lookup ignores `deletedAt` on purpose: an archived appointment is
+    // precisely the row this command is here to find.
+    const appointment = await getPrisma().appointment.findFirst({
+      where: { id: appointmentId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
+
+    if (!appointment.deletedAt) {
+      return actionSuccess({ id: appointment.id, restoredAt: null });
+    }
+
+    const restoredAt = new Date();
+    await getPrisma().appointment.update({
+      where: { id: appointment.id },
+      data: { deletedAt: null },
+    });
+
+    return actionSuccess({
+      id: appointment.id,
+      restoredAt: restoredAt.toISOString(),
+    });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+/**
  * Checks a patient in from an appointment. The visit and the appointment's
  * attended status are one change: either the visit exists and the appointment
  * reads as attended, or neither happened. An appointment is checked in once, so a
@@ -159,8 +217,8 @@ export async function deleteAppointment(
 export async function checkInAppointment(
   appointmentId: string
 ): Promise<ActionResult<CheckInResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_CHECK_IN);
+  if (!actor.ok) return actor;
 
   try {
     const appointment = await getPrisma().appointment.findFirst({
@@ -188,8 +246,8 @@ export async function checkInAppointment(
       const opened = await tx.visit.create({
         data: {
           patientId: appointment.patientId,
-          providerId: appointment.providerId ?? session.user.id,
-          createdById: session.user.id,
+          providerId: appointment.providerId ?? actor.data.user.id,
+          createdById: actor.data.user.id,
           appointmentId: appointment.id,
           visitType: visitTypeFor(appointment.appointmentType),
           startDateTime: appointment.startDateTime,

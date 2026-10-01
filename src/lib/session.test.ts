@@ -20,7 +20,12 @@ import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 
 const ACTIVE_SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 describe("session guard", () => {

@@ -1,6 +1,6 @@
 import { calculateAgeAt, clinicTimeZone } from "@/lib/clinic-time";
 import { getPrisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/session";
+import { PERMISSIONS, requirePermission } from "@/server/access";
 import {
   PATIENT_AGE_BANDS,
   PATIENT_REPORT_TYPES,
@@ -54,7 +54,7 @@ export async function getPatientReport(
   period: PatientReportPeriod = "month",
   now: Date = new Date()
 ): Promise<PatientReportDto> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.REPORTS_READ);
 
   const window = windowEndingAt(now, period);
   const previous = windowEndingAt(window.from, period);

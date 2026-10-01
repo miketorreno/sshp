@@ -48,7 +48,12 @@ const PATIENT = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const listRequest = (query = "") =>
@@ -68,6 +73,19 @@ const UNAUTHENTICATED_BODY = {
     message: FAILURE_MESSAGES.UNAUTHENTICATED,
   },
 };
+
+const FORBIDDEN_BODY = {
+  error: {
+    code: FAILURE_CODES.FORBIDDEN,
+    message: FAILURE_MESSAGES.FORBIDDEN,
+  },
+};
+
+/** The same clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 describe("patient read routes", () => {
   beforeEach(() => {
@@ -236,6 +254,47 @@ describe("patient read routes", () => {
 
       expect(response.status).toBe(401);
       await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
+    });
+  });
+
+  describe("roles", () => {
+    it("answers every patient read with forbidden for an account that holds no patient permission", async () => {
+      getSession.mockResolvedValue(sessionFor("PATIENT"));
+
+      const responses = [
+        await patientRoute.GET(listRequest()),
+        await detailRequest("patient-1"),
+        await admittedGET(),
+        await patientReportRoute.GET(reportRequest()),
+      ];
+
+      for (const response of responses) {
+        expect(response.status).toBe(403);
+        await expect(response.json()).resolves.toEqual(FORBIDDEN_BODY);
+      }
+    });
+
+    it("keeps the report behind its own permission", async () => {
+      getSession.mockResolvedValue(sessionFor("USER"));
+
+      await expect(patientRoute.GET(listRequest())).resolves.toMatchObject({
+        status: 200,
+      });
+      await expect(
+        patientReportRoute.GET(reportRequest()),
+      ).resolves.toMatchObject({ status: 403 });
+    });
+
+    it("answers a deactivated account with forbidden, whatever role it kept", async () => {
+      getSession.mockResolvedValue({
+        ...sessionFor("ADMIN"),
+        user: { ...sessionFor("ADMIN").user, isActive: false },
+      });
+
+      const response = await patientRoute.GET(listRequest());
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual(FORBIDDEN_BODY);
     });
   });
 });

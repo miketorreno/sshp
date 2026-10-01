@@ -24,8 +24,17 @@ import {
 import {
   recordVitals,
   deleteVitals,
+  restoreVitals,
   type VitalsInput,
 } from "@/server/visits/vitals-commands";
+
+const ARCHIVED_AT = new Date("2026-02-01T00:00:00.000Z");
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const input = (overrides: Partial<VitalsInput> = {}): VitalsInput => ({
   visitId: "visit-1",
@@ -191,5 +200,87 @@ describe("vitals commands", () => {
         archivedAt,
       );
     });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      seed({ vitals: [vitals({ deletedAt: ARCHIVED_AT })] });
+    });
+
+    it("brings the reading back to its visit", async () => {
+      const result = await restoreVitals("visit-1", "vitals-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
+      expect(result.ok && result.data.restoredAt).toEqual(expect.any(String));
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
+    });
+
+    it("is idempotent for a reading that is already active", async () => {
+      seed({ vitals: [vitals()] });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toEqual({
+        ok: true,
+        data: { id: "vitals-1", restoredAt: null },
+      });
+    });
+
+    it("answers not found for an unknown reading", async () => {
+      await expect(restoreVitals("visit-1", "vitals-404")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+    });
+
+    it("refuses to restore a reading whose visit is out of the way itself", async () => {
+      seed({
+        visits: [visit({ deletedAt: ARCHIVED_AT })],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
+    });
+
+    it("refuses a restore to a nurse, who may archive but not restore", async () => {
+      getSession.mockResolvedValue(sessionFor("NURSE"));
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+    });
+  });
+});
+
+describe("roles", () => {
+  beforeEach(() => {
+    seed();
+  });
+
+  it("refuses recording vitals to a role that only reads the visit", async () => {
+    getSession.mockResolvedValue(sessionFor("PHARMACIST"));
+
+    await expect(recordVitals(input())).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.vitals).toHaveLength(0);
+  });
+
+  it("refuses archiving vitals to the front desk", async () => {
+    getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+    seed({ vitals: [vitals()] });
+
+    await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
   });
 });

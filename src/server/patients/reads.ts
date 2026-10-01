@@ -1,5 +1,5 @@
 import { getPrisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/session";
+import { PERMISSIONS, requirePermission } from "@/server/access";
 import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
@@ -15,9 +15,9 @@ import {
 } from "./dto";
 
 /**
- * Patient reads for staff screens. Every read requires a session, and every
- * read hides archived patients: an archived record is history, not something
- * normal clinical screens show.
+ * Patient reads for staff screens. Every read requires a session that holds
+ * `patients:read`, and every read hides archived patients: an archived record is
+ * history, not something normal clinical screens show.
  */
 
 const ACTIVE_PATIENT = { deletedAt: null } as const;
@@ -48,7 +48,7 @@ const NEWEST_FIRST = { createdAt: "desc", id: "desc" } as const;
 export async function listPatients(
   query: PatientListQuery = {}
 ): Promise<PatientListDto> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.PATIENTS_READ);
 
   const page = Math.max(1, Math.trunc(query.page ?? 1));
   const pageSize = clamp(query.limit);
@@ -99,7 +99,7 @@ function searched(term: string | undefined) {
 }
 
 export async function listAdmittedPatients(): Promise<AdmittedPatientDto[]> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.PATIENTS_READ);
 
   const patients = await getPrisma().patient.findMany({
     where: { ...ACTIVE_PATIENT, patientType: "INPATIENT" },
@@ -113,7 +113,7 @@ export async function listAdmittedPatients(): Promise<AdmittedPatientDto[]> {
 export async function getPatientDetail(
   id: string
 ): Promise<PatientDetailDto | null> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.PATIENTS_READ);
 
   const patient = await getPrisma().patient.findFirst({
     where: { id, ...ACTIVE_PATIENT },

@@ -17,7 +17,12 @@ import { getPatientReport } from "@/server/patients/report";
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const NOW = new Date("2026-03-15T12:00:00.000Z");

@@ -6,7 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
-import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { PERMISSIONS, authorize } from "@/server/access";
 import type { VisitType } from "@/generated/prisma";
 import {
   VISIT_ALREADY_CHECKED_OUT,
@@ -16,7 +16,8 @@ import {
 } from "./contract";
 
 /**
- * Visit write commands. Each one requires a session, addresses the visit the path
+ * Visit write commands. Each one requires a session holding the permission its
+ * change needs, addresses the visit the path
  * names rather than an id in the body, verifies that visit is still an active one
  * for an active patient, and answers with a stable result instead of throwing.
  *
@@ -42,6 +43,12 @@ export type VisitWriteResult = { id: string };
 
 export type VisitArchiveResult = { id: string; archivedAt: string };
 
+/**
+ * `restoredAt` is null when the visit was already active, so a retried restore
+ * reports that there was no archive left to reverse.
+ */
+export type VisitRestoreResult = { id: string; restoredAt: string | null };
+
 const ACTIVE_VISIT = {
   deletedAt: null,
   patient: { deletedAt: null },
@@ -50,8 +57,8 @@ const ACTIVE_VISIT = {
 export async function createVisit(
   input: VisitInput,
 ): Promise<ActionResult<VisitWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VISITS_WRITE);
+  if (!actor.ok) return actor;
 
   if (!(await isActivePatient(input.patientId)))
     return knownFailure(VISIT_PATIENT_NOT_FOUND);
@@ -60,8 +67,8 @@ export async function createVisit(
     const created = await getPrisma().visit.create({
       data: {
         patientId: input.patientId,
-        providerId: session.user.id,
-        createdById: session.user.id,
+        providerId: actor.data.user.id,
+        createdById: actor.data.user.id,
         visitType: input.visitType,
         startDateTime: input.startDateTime,
         reason: input.reason,
@@ -78,8 +85,8 @@ export async function updateVisit(
   visitId: string,
   input: VisitEdit,
 ): Promise<ActionResult<VisitWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VISITS_WRITE);
+  if (!actor.ok) return actor;
 
   const visit = await findActiveVisit(visitId);
 
@@ -93,7 +100,7 @@ export async function updateVisit(
         visitType: input.visitType,
         startDateTime: input.startDateTime,
         reason: input.reason,
-        updatedById: session.user.id,
+        updatedById: actor.data.user.id,
       },
     });
 
@@ -110,8 +117,8 @@ export async function updateVisit(
 export async function checkoutVisit(
   visitId: string,
 ): Promise<ActionResult<VisitWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VISITS_WRITE);
+  if (!actor.ok) return actor;
 
   const visit = await findActiveVisit(visitId);
 
@@ -121,7 +128,7 @@ export async function checkoutVisit(
   try {
     const checkedOut = await getPrisma().visit.update({
       where: { id: visit.id },
-      data: { endDateTime: new Date(), updatedById: session.user.id },
+      data: { endDateTime: new Date(), updatedById: actor.data.user.id },
     });
 
     return actionSuccess({ id: checkedOut.id });
@@ -137,8 +144,8 @@ export async function checkoutVisit(
 export async function deleteVisit(
   visitId: string,
 ): Promise<ActionResult<VisitArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.VISITS_ARCHIVE);
+  if (!actor.ok) return actor;
 
   try {
     const visit = await getPrisma().visit.findFirst({
@@ -163,13 +170,65 @@ export async function deleteVisit(
     const archivedAt = new Date();
     await getPrisma().visit.update({
       where: { id: visit.id },
-      data: { deletedAt: archivedAt, updatedById: session.user.id },
+      data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
     });
 
     return actionSuccess({
       id: visit.id,
       archivedAt: archivedAt.toISOString(),
     });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+/**
+ * Reverses an archive: the visit returns to the day's list and to its detail page.
+ *
+ * Idempotent, like archiving is. It restores the visit alone, and it is the only
+ * restore that insists on its surroundings: a visit under an archived patient is
+ * not restorable, because a restored visit whose patient is still out of the way
+ * would read as a half record. The archive is therefore unwound from the top down —
+ * patient, then visit, then the vitals and orders inside it — and each step
+ * reports the same NOT_FOUND the archive reported when the row was not there.
+ *
+ * Restoring does not undo a checkout. The end of a visit is a fact recorded once,
+ * so a restored visit reads as the closed visit it was.
+ *
+ * Only an administrator restores: an archive is how the clinic takes a mistake or
+ * a record it must not keep in the way, and the role that may archive one is not
+ * thereby trusted to bring one back.
+ */
+export async function restoreVisit(
+  visitId: string
+): Promise<ActionResult<VisitRestoreResult>> {
+  const actor = await authorize(PERMISSIONS.VISITS_RESTORE);
+  if (!actor.ok) return actor;
+
+  try {
+    // The lookup ignores `deletedAt` on purpose: an archived visit is precisely
+    // the row this command is here to find.
+    const visit = await getPrisma().visit.findFirst({
+      where: { id: visitId, patient: { deletedAt: null } },
+      select: { id: true, deletedAt: true },
+    });
+
+    // A visit under an archived patient is reported as not found rather than
+    // restored: a restored visit whose patient is still out of the way would read
+    // as a half record, so the archive unwinds from the top down.
+    if (!visit) return knownFailure(VISIT_NOT_FOUND);
+
+    if (!visit.deletedAt) {
+      return actionSuccess({ id: visit.id, restoredAt: null });
+    }
+
+    const restoredAt = new Date();
+    await getPrisma().visit.update({
+      where: { id: visit.id },
+      data: { deletedAt: null, updatedById: actor.data.user.id },
+    });
+
+    return actionSuccess({ id: visit.id, restoredAt: restoredAt.toISOString() });
   } catch (error) {
     return writeFailure(error);
   }

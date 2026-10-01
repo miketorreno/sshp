@@ -39,7 +39,12 @@ import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "reception@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "reception@clinic.test",
+    role: "RECEPTIONIST",
+    isActive: true,
+  },
 };
 
 const APPOINTMENT = {

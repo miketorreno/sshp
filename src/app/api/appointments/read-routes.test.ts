@@ -34,7 +34,12 @@ const APPOINTMENT = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const UNAUTHENTICATED_BODY = {
@@ -202,5 +207,27 @@ describe("appointment read routes", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
+  });
+
+  it("answers every appointment read with forbidden for an account that holds no appointment permission", async () => {
+    getSession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "PATIENT" },
+    });
+
+    const responses = [
+      await appointmentRoute.GET(listRequest()),
+      await detailRequest("appointment-1"),
+    ];
+
+    for (const response of responses) {
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+    }
   });
 });

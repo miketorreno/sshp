@@ -7,7 +7,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
-import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { PERMISSIONS, authorize } from "@/server/access";
 import { VISIT_CHECKED_OUT } from "./contract";
 import {
   IMAGING_ORDER_NOT_FOUND,
@@ -20,10 +20,11 @@ import {
 /**
  * Order write commands. A lab, imaging or medication request belongs to a visit,
  * so each command addresses the visit the page is on rather than trusting an id
- * in the body, verifies that visit is still an active one for an active patient,
- * and records who ordered.
+ * in the body, requires a session holding the permission its change needs,
+ * verifies that visit is still an active one for an active patient, and records
+ * who ordered.
  *
- * Archiving an order keeps the row and leaves its status alone: the "Delete"
+ * Archiving an order keeps the row and leaves its status alone: the "Archive"
  * button means the order leaves normal clinical reads, not that the order was
  * ever cancelled. An archived order is retained history, so a retried archive
  * reports the same archive rather than a failure.
@@ -51,6 +52,12 @@ export type OrderWriteResult = { id: string };
 
 export type OrderArchiveResult = { id: string; archivedAt: string };
 
+/**
+ * `restoredAt` is null when the order was already active, so a retried restore
+ * reports that there was no archive left to reverse.
+ */
+export type OrderRestoreResult = { id: string; restoredAt: string | null };
+
 const ACTIVE_VISIT = {
   deletedAt: null,
   patient: { deletedAt: null },
@@ -67,9 +74,6 @@ export async function archiveLabOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
-
   return archiveOrder(visitId, getPrisma().labOrder, orderId, LAB_ORDER_NOT_FOUND);
 }
 
@@ -84,9 +88,6 @@ export async function archiveImagingOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
-
   return archiveOrder(
     visitId,
     getPrisma().imagingOrder,
@@ -106,10 +107,38 @@ export async function archiveMedicationOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
-
   return archiveOrder(
+    visitId,
+    getPrisma().medicationOrder,
+    orderId,
+    MEDICATION_ORDER_NOT_FOUND,
+  );
+}
+
+export async function restoreLabOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  return restoreOrder(visitId, getPrisma().labOrder, orderId, LAB_ORDER_NOT_FOUND);
+}
+
+export async function restoreImagingOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  return restoreOrder(
+    visitId,
+    getPrisma().imagingOrder,
+    orderId,
+    IMAGING_ORDER_NOT_FOUND,
+  );
+}
+
+export async function restoreMedicationOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  return restoreOrder(
     visitId,
     getPrisma().medicationOrder,
     orderId,
@@ -128,8 +157,8 @@ async function requestOrder<Fields extends object>(
   fields: Fields,
   unmet?: (fields: Fields) => Promise<ActionFailure | null>,
 ): Promise<ActionResult<OrderWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.ORDERS_WRITE);
+  if (!actor.ok) return actor;
 
   const visit = await findActiveVisit(visitId);
 
@@ -141,7 +170,7 @@ async function requestOrder<Fields extends object>(
 
   try {
     const created = await orders.create({
-      data: { visitId, orderedById: session.user.id, ...fields },
+      data: { visitId, orderedById: actor.data.user.id, ...fields },
     });
 
     return actionSuccess({ id: created.id });
@@ -167,6 +196,9 @@ async function archiveOrder(
   orderId: string,
   notFound: ActionFailure,
 ): Promise<ActionResult<OrderArchiveResult>> {
+  const actor = await authorize(PERMISSIONS.ORDERS_ARCHIVE);
+  if (!actor.ok) return actor;
+
   const visit = await findActiveVisit(visitId);
 
   if (!visit) return knownFailure(ORDER_VISIT_NOT_FOUND);
@@ -203,6 +235,55 @@ async function archiveOrder(
   }
 }
 
+/**
+ * Reverses an archive: the order returns to the visit it was requested against.
+ *
+ * Idempotent, like archiving is. Like archiving it also insists on the visit in
+ * the path being an active one for an active patient, so an order cannot be
+ * restored into a visit that is itself out of the way — the archive is unwound
+ * from the top down, visit before order. A restored order keeps its status: an
+ * archived order was never cancelled, so restoring it does not cancel it now.
+ *
+ * Only an administrator restores: an archive is how the clinic takes a mistake or
+ * a record it must not keep in the way, and the role that may archive an order is
+ * not thereby trusted to bring one back.
+ */
+async function restoreOrder(
+  visitId: string,
+  orders: OrderTable,
+  orderId: string,
+  notFound: ActionFailure,
+): Promise<ActionResult<OrderRestoreResult>> {
+  const actor = await authorize(PERMISSIONS.ORDERS_RESTORE);
+  if (!actor.ok) return actor;
+
+  const visit = await findActiveVisit(visitId);
+
+  if (!visit) return knownFailure(ORDER_VISIT_NOT_FOUND);
+
+  try {
+    // The visit in the path owns the lookup, and it ignores `deletedAt` on
+    // purpose: an archived order is precisely the row this command is here to find.
+    const order = await orders.findFirst({
+      where: { id: orderId, visitId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!order) return knownFailure(notFound);
+
+    if (!order.deletedAt) {
+      return actionSuccess({ id: order.id, restoredAt: null });
+    }
+
+    const restoredAt = new Date();
+    await orders.update({ where: { id: order.id }, data: { deletedAt: null } });
+
+    return actionSuccess({ id: order.id, restoredAt: restoredAt.toISOString() });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
 /** The shape of an order model this command needs, whichever kind it holds. */
 type OrderTable = {
   findFirst: (args: {
@@ -211,7 +292,7 @@ type OrderTable = {
   }) => Promise<{ id: string; deletedAt: Date | null } | null>;
   update: (args: {
     where: { id: string };
-    data: { deletedAt: Date };
+    data: { deletedAt: Date | null };
   }) => Promise<unknown>;
 };
 

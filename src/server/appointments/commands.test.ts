@@ -19,6 +19,7 @@ import {
   checkInAppointment,
   createAppointment,
   deleteAppointment,
+  restoreAppointment,
   updateAppointment,
   type AppointmentEdit,
   type AppointmentInput,
@@ -79,7 +80,12 @@ const ARCHIVED_PATIENT = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "reception@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "reception@clinic.test",
+    role: "RECEPTIONIST",
+    isActive: true,
+  },
 };
 
 const seed = ({
@@ -114,6 +120,12 @@ const seed = ({
   });
   table.destroyed.splice(0, table.destroyed.length);
 };
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const signedOut = {
   ok: false,
@@ -466,6 +478,83 @@ describe("appointment write commands", () => {
         notFound
       );
       expect(table.visits).toEqual([]);
+    });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockReset().mockResolvedValue(sessionFor("ADMIN"));
+    });
+
+    it("brings the appointment back into the normal reads", async () => {
+      await expect(
+        getAppointmentDetail(ARCHIVED.id),
+      ).resolves.toBeNull();
+
+      const result = await restoreAppointment(ARCHIVED.id);
+
+      expect(result.ok).toBe(true);
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toBeNull();
+      await expect(
+        getAppointmentDetail(ARCHIVED.id),
+      ).resolves.toMatchObject({ id: ARCHIVED.id });
+    });
+
+    it("is idempotent for an appointment that is already active", async () => {
+      const result = await restoreAppointment("appointment-1");
+
+      expect(result).toEqual({
+        ok: true,
+        data: { id: "appointment-1", restoredAt: null },
+      });
+    });
+
+    it("reports an unknown appointment as not found", async () => {
+      await expect(restoreAppointment("appointment-404")).resolves.toEqual(
+        notFound
+      );
+    });
+
+    it("refuses a restore to the front desk, which may archive but not restore", async () => {
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt
+      );
+    });
+  });
+
+  describe("roles", () => {
+    it("refuses booking, archiving, and checking in to a role that only reads appointments", async () => {
+      getSession.mockResolvedValue(sessionFor("LAB_TECHNICIAN"));
+
+      for (const result of [
+        await createAppointment({ ...INPUT, patientId: "patient-1" }),
+        await updateAppointment("appointment-1", EDIT),
+        await deleteAppointment("appointment-1"),
+        await checkInAppointment("appointment-1"),
+      ]) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: FAILURE_CODES.FORBIDDEN },
+        });
+      }
+
+      expect(table.appointments[0]).toEqual(APPOINTMENT);
+      expect(table.visits).toEqual([]);
+    });
+
+    it("refuses a patient write to a role that only reads patients", async () => {
+      getSession.mockResolvedValue(sessionFor("PATIENT"));
+
+      await expect(createAppointment({ ...INPUT, patientId: "patient-1" })).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
     });
   });
 });

@@ -31,6 +31,9 @@ import {
   requestImagingOrder,
   requestLabOrder,
   requestMedicationOrder,
+  restoreImagingOrder,
+  restoreLabOrder,
+  restoreMedicationOrder,
   type ImagingOrderInput,
   type LabOrderInput,
   type MedicationOrderInput,
@@ -281,5 +284,105 @@ describe.each(ARCHIVABLE)("archiving a $kind order", (kind) => {
       error: { code: FAILURE_CODES.CONFLICT },
     });
     expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
+  });
+});
+
+/** Restoring is the same command for all three kinds, so it is stated once. */
+const RESTORABLE = [
+  {
+    kind: "lab",
+    restore: restoreLabOrder,
+    order: labOrder,
+    find: (id: string) => table.findLabOrder(id),
+    seeded: (orders: Record<string, unknown>[]) => ({ labOrders: orders }),
+  },
+  {
+    kind: "imaging",
+    restore: restoreImagingOrder,
+    order: imagingOrder,
+    find: (id: string) => table.findImagingOrder(id),
+    seeded: (orders: Record<string, unknown>[]) => ({ imagingOrders: orders }),
+  },
+  {
+    kind: "medication",
+    restore: restoreMedicationOrder,
+    order: medOrder,
+    find: (id: string) => table.findMedOrder(id),
+    seeded: (orders: Record<string, unknown>[]) => ({ medOrders: orders }),
+  },
+] as const;
+
+describe.each(RESTORABLE)("restoring a $kind order", (kind) => {
+  beforeEach(() => {
+    getSession.mockReset().mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "ADMIN" },
+    });
+    seed(kind.seeded([kind.order({ id: "order-1", deletedAt: ARCHIVED_AT })]));
+  });
+
+  it("brings the order back, keeping its status", async () => {
+    const result = await kind.restore("visit-1", "order-1");
+
+    expect(result).toMatchObject({ ok: true, data: { id: "order-1" } });
+    expect(result.ok && result.data.restoredAt).toEqual(expect.any(String));
+    expect(kind.find("order-1")?.deletedAt).toBeNull();
+    expect(kind.find("order-1")?.orderStatus).toBe("REQUESTED");
+  });
+
+  it("is idempotent for an order that is already active", async () => {
+    seed(kind.seeded([kind.order({ id: "order-1" })]));
+
+    await expect(
+      kind.restore("visit-1", "order-1"),
+    ).resolves.toEqual({
+      ok: true,
+      data: { id: "order-1", restoredAt: null },
+    });
+  });
+
+  it("answers not found for an unknown order", async () => {
+    await expect(kind.restore("visit-1", "order-404")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.NOT_FOUND },
+    });
+  });
+
+  it("refuses to restore an order whose visit is out of the way itself", async () => {
+    seed({
+      visits: [visit({ deletedAt: ARCHIVED_AT })],
+      ...kind.seeded([kind.order({ id: "order-1", deletedAt: ARCHIVED_AT })]),
+    });
+
+    await expect(kind.restore("visit-1", "order-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.NOT_FOUND },
+    });
+    expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
+  });
+
+  it("refuses a restore to a clinician who may archive but not restore", async () => {
+    getSession.mockResolvedValue(SESSION);
+
+    await expect(kind.restore("visit-1", "order-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
+  });
+});
+
+describe("requesting an order", () => {
+  it("refuses a request to a role that reads orders but does not write them", async () => {
+    getSession.mockReset().mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "LAB_TECHNICIAN" },
+    });
+
+    await expect(requestLabOrder("visit-1", lab())).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.labOrders).toHaveLength(0);
   });
 });

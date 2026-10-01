@@ -16,6 +16,7 @@ import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   createPatient,
   deletePatient,
+  restorePatient,
   updatePatient,
   type PatientInput,
 } from "@/server/patients/commands";
@@ -64,11 +65,22 @@ const archivedAda = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const seed = (...patients: Record<string, unknown>[]) => {
-  table.rows.splice(0, table.rows.length, ...patients);
+  // Copied, because a write in one test would otherwise leave the shared fixture
+  // archived for the next test that seeds it.
+  table.rows.splice(
+    0,
+    table.rows.length,
+    ...patients.map((patient) => ({ ...patient }))
+  );
   table.destroyed.splice(0, table.destroyed.length);
 };
 
@@ -87,6 +99,20 @@ const notFound = {
   ok: false,
   error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
 };
+
+const forbidden = {
+  ok: false,
+  error: {
+    code: FAILURE_CODES.FORBIDDEN,
+    message: FAILURE_MESSAGES.FORBIDDEN,
+  },
+};
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const emailTaken = {
   ok: false,
@@ -121,6 +147,24 @@ describe("patient write commands", () => {
 
     expect(table.rows).toHaveLength(2);
     expect(table.rows[0]).toEqual(ada);
+  });
+
+  it("refuses a write and an archive to an account that holds neither permission", async () => {
+    getSession.mockResolvedValue(sessionFor("LAB_TECHNICIAN"));
+
+    await expect(createPatient(INPUT)).resolves.toEqual(forbidden);
+    await expect(updatePatient("patient-1", INPUT)).resolves.toEqual(forbidden);
+    await expect(deletePatient("patient-1")).resolves.toEqual(forbidden);
+
+    expect(table.rows[0]).toEqual(ada);
+  });
+
+  it("refuses a restore to anyone but an administrator", async () => {
+    getSession.mockResolvedValue(sessionFor("DOCTOR"));
+
+    await expect(restorePatient("patient-2")).resolves.toEqual(forbidden);
+
+    expect(table.rows[1]).toEqual(archivedAda);
   });
 
   describe("create", () => {
@@ -296,6 +340,33 @@ describe("patient write commands", () => {
     it("reports an unknown patient as not found", async () => {
       await expect(deletePatient("patient-404")).resolves.toEqual(notFound);
       expect(table.destroyed).toEqual([]);
+    });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+    });
+
+    it("brings an archived patient back into the reads", async () => {
+      const result = await restorePatient(archivedAda.id);
+
+      expect(result.ok).toBe(true);
+      expect(table.find(archivedAda.id)?.deletedAt).toBeNull();
+      await expect(getPatientDetail(archivedAda.id)).resolves.toMatchObject({
+        id: archivedAda.id,
+      });
+    });
+
+    it("is idempotent for a patient who is already active", async () => {
+      const result = await restorePatient(ada.id);
+
+      expect(result).toEqual({ ok: true, data: { id: ada.id, restoredAt: null } });
+      expect(table.find(ada.id)?.deletedAt).toBeNull();
+    });
+
+    it("reports an unknown patient as not found", async () => {
+      await expect(restorePatient("patient-404")).resolves.toEqual(notFound);
     });
   });
 });

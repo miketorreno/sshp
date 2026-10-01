@@ -138,4 +138,38 @@ describe("visit read routes", () => {
       await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
     });
   });
+
+  describe("roles", () => {
+    it("answers every visit read with forbidden for an account that holds no visit permission", async () => {
+      getSession.mockResolvedValue({ ...SESSION, user: { ...SESSION.user, role: "PATIENT" } });
+
+      const responses = [
+        await visitRoute.GET(listRequest()),
+        await detailRequest("visit-1"),
+      ];
+
+      for (const response of responses) {
+        expect(response.status).toBe(403);
+        await expect(response.json()).resolves.toEqual({
+          error: {
+            code: FAILURE_CODES.FORBIDDEN,
+            message: FAILURE_MESSAGES.FORBIDDEN,
+          },
+        });
+      }
+    });
+
+    it("keeps the visit a check-in opens readable for the role that checks in", async () => {
+      getSession.mockResolvedValue({
+        ...SESSION,
+        user: { ...SESSION.user, role: "RECEPTIONIST" },
+      });
+
+      // A check-in ends in the visit it opened, so the front desk has to be able
+      // to read the visit its own check-in sends it to.
+      await expect(detailRequest("visit-1")).resolves.toMatchObject({
+        status: 200,
+      });
+    });
+  });
 });

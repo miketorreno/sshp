@@ -14,6 +14,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
 import {
+  ARCHIVED_PATIENT,
   CHECKED_OUT,
   PATIENT,
   SESSION,
@@ -25,6 +26,7 @@ import {
   checkoutVisit,
   createVisit,
   deleteVisit,
+  restoreVisit,
   updateVisit,
   type VisitInput,
 } from "@/server/visits/commands";
@@ -41,6 +43,12 @@ const input = (overrides: Partial<VisitInput> = {}): VisitInput => ({
 
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 describe("visit commands", () => {
   beforeEach(() => {
@@ -245,5 +253,97 @@ describe("visit commands", () => {
         error: { code: FAILURE_CODES.UNAUTHENTICATED },
       });
     });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      seed({ visits: [visit({ deletedAt: ARCHIVED })] });
+    });
+
+    it("brings the visit back to the day's list", async () => {
+      const result = await restoreVisit("visit-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
+      expect(result.ok && result.data.restoredAt).toEqual(expect.any(String));
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
+    it("is idempotent for a visit that is already active", async () => {
+      seed();
+
+      await expect(restoreVisit("visit-1")).resolves.toEqual({
+        ok: true,
+        data: { id: "visit-1", restoredAt: null },
+      });
+    });
+
+    it("keeps a checkout a restored visit already had", async () => {
+      seed({
+        visits: [visit({ endDateTime: CHECKED_OUT, deletedAt: ARCHIVED })],
+      });
+
+      const result = await restoreVisit("visit-1");
+
+      expect(result).toMatchObject({ ok: true });
+      expect(table.findVisit("visit-1")?.endDateTime).toEqual(CHECKED_OUT);
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
+    it("answers not found for an unknown visit", async () => {
+      await expect(restoreVisit("visit-404")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+    });
+
+    it("refuses to restore a visit under an archived patient", async () => {
+      seed({
+        patients: [ARCHIVED_PATIENT],
+        visits: [visit({ deletedAt: ARCHIVED })],
+      });
+
+      await expect(restoreVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toEqual(ARCHIVED);
+    });
+
+    it("refuses a restore to a clinician who may archive but not restore", async () => {
+      getSession.mockResolvedValue(sessionFor("DOCTOR"));
+
+      await expect(restoreVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toEqual(ARCHIVED);
+    });
+  });
+});
+
+describe("roles", () => {
+  beforeEach(() => {
+    seed();
+  });
+
+  it("refuses a visit write to a role that only reads visits", async () => {
+    getSession.mockResolvedValue(sessionFor("PHARMACIST"));
+
+    await expect(createVisit(input())).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.visits).toHaveLength(1);
+  });
+
+  it("refuses archiving a visit to the front desk", async () => {
+    getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+
+    await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
   });
 });

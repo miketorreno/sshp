@@ -1,5 +1,5 @@
 import { getPrisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/session";
+import { PERMISSIONS, requirePermission } from "@/server/access";
 import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
@@ -34,7 +34,7 @@ const APPOINTMENT_RELATIONS = {
 export async function listAppointments(
   query: AppointmentListQuery = {},
 ): Promise<AppointmentSummaryDto[]> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.APPOINTMENTS_READ);
 
   const page = Math.max(1, Math.trunc(query.page ?? 1));
   const limit = clamp(query.limit);
@@ -102,7 +102,7 @@ function searchedPatient(term: string | undefined) {
 export async function listAppointmentsInWindow(
   window: AppointmentWindow,
 ): Promise<AppointmentSummaryDto[]> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.APPOINTMENTS_READ);
 
   const appointments = await getPrisma().appointment.findMany({
     where: {
@@ -144,7 +144,7 @@ async function toSummaries(
 export async function getAppointmentDetail(
   id: string,
 ): Promise<AppointmentDetailDto | null> {
-  await requireSession();
+  await requirePermission(PERMISSIONS.APPOINTMENTS_READ);
 
   const appointment = await getPrisma().appointment.findFirst({
     where: { id, ...ACTIVE_APPOINTMENT },

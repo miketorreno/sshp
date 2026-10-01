@@ -28,6 +28,7 @@ describe("action results", () => {
     }
 
     expect(statusForFailure(FAILURE_CODES.UNAUTHENTICATED)).toBe(401);
+    expect(statusForFailure(FAILURE_CODES.FORBIDDEN)).toBe(403);
     expect(statusForFailure(FAILURE_CODES.INVALID_INPUT)).toBe(400);
     expect(statusForFailure(FAILURE_CODES.NOT_FOUND)).toBe(404);
     expect(statusForFailure(FAILURE_CODES.CONFLICT)).toBe(409);
