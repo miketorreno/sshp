@@ -323,7 +323,7 @@ describe("appointment write commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the appointment instead of destroying it", async () => {
       const result = await archiveAppointment("appointment-1");
 
@@ -515,6 +515,18 @@ describe("appointment write commands", () => {
       );
     });
 
+    it("refuses to restore an appointment whose patient is out of the way itself", async () => {
+      table.appointments[1] = {
+        ...ARCHIVED,
+        patientId: ARCHIVED_PATIENT.id,
+      };
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toEqual(notFound);
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt
+      );
+    });
+
     it("refuses a restore to the front desk, which may archive but not restore", async () => {
       getSession.mockResolvedValue(SESSION);
 
@@ -548,10 +560,12 @@ describe("appointment write commands", () => {
       expect(table.visits).toEqual([]);
     });
 
-    it("refuses a patient write to a role that only reads patients", async () => {
+    it("refuses booking anything to a patient account", async () => {
       getSession.mockResolvedValue(sessionFor("PATIENT"));
 
-      await expect(createAppointment({ ...INPUT, patientId: "patient-1" })).resolves.toMatchObject({
+      await expect(
+        createAppointment({ ...INPUT, patientId: "patient-1" }),
+      ).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.FORBIDDEN },
       });

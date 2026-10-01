@@ -5,7 +5,7 @@ import { Loader2, MoreHorizontal, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { archivePatient as archivePatientAction } from "@/app/actions/patient-actions";
+import { archivePatient } from "@/app/actions/patient-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -87,9 +87,9 @@ const AllPatientsPage = () => {
 
   const [isArchiving, startArchiving] = useTransition();
 
-  const archivePatient = (patientId: string) => {
+  const archive = (patientId: string) => {
     startArchiving(async () => {
-      const result = await archivePatientAction(patientId);
+      const result = await archivePatient(patientId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -213,7 +213,7 @@ const AllPatientsPage = () => {
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer"
                               disabled={isArchiving}
-                              onClick={() => archivePatient(patient.id)}
+                              onClick={() => archive(patient.id)}
                             >
                               Archive
                             </DropdownMenuItem>

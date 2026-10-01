@@ -244,9 +244,7 @@ async function archiveOrder(
  * from the top down, visit before order. A restored order keeps its status: an
  * archived order was never cancelled, so restoring it does not cancel it now.
  *
- * Only an administrator restores: an archive is how the clinic takes a mistake or
- * a record it must not keep in the way, and the role that may archive an order is
- * not thereby trusted to bring one back.
+ * Only an administrator restores; see ADR 0005.
  */
 async function restoreOrder(
   visitId: string,

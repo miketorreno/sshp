@@ -44,7 +44,6 @@ export const PERMISSIONS = {
   VITALS_ARCHIVE: "vitals:archive",
   VITALS_RESTORE: "vitals:restore",
 
-  ORDERS_READ: "orders:read",
   ORDERS_WRITE: "orders:write",
   ORDERS_ARCHIVE: "orders:archive",
   ORDERS_RESTORE: "orders:restore",
@@ -67,10 +66,19 @@ const EVERY_PERMISSION: readonly Permission[] = Object.values(PERMISSIONS);
 const CLINICAL_READS = [
   PERMISSIONS.PATIENTS_READ,
   PERMISSIONS.VISITS_READ,
-  PERMISSIONS.ORDERS_READ,
   PERMISSIONS.MEDICATIONS_READ,
   PERMISSIONS.REPORTS_READ,
   PERMISSIONS.APPOINTMENTS_READ,
+] as const satisfies readonly Permission[];
+
+/**
+ * What a technician reads: the patient a visit belongs to and that visit with
+ * the orders on it. One reading, so the two roles that read the same work hold
+ * the same line here rather than two that look alike.
+ */
+const TECHNICIAN_READS = [
+  PERMISSIONS.PATIENTS_READ,
+  PERMISSIONS.VISITS_READ,
 ] as const satisfies readonly Permission[];
 
 /**
@@ -91,6 +99,11 @@ const CLINICAL_READS = [
  *   completions, administrations — do not exist yet, so nothing is reserved for
  *   them here: when those commands arrive they ask for the permission they need,
  *   and the matrix is where the answer is decided.
+ *
+ * There is no `orders:read`, because nothing asks for one: orders are read as
+ * part of the visit they belong to, so a role that may read a visit may read its
+ * orders. A read of orders in its own right would be a new capability with a new
+ * name, decided when there is a read to name it after.
  * - `PATIENT` is a patient account. There is no patient-facing surface in this
  *   app, so it holds nothing; the day there is one, it is a screen, not a
  *   widened grant on the staff matrix.
@@ -140,22 +153,12 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.REPORTS_READ,
   ],
 
-  LAB_TECHNICIAN: [
-    PERMISSIONS.PATIENTS_READ,
-    PERMISSIONS.VISITS_READ,
-    PERMISSIONS.ORDERS_READ,
-  ],
-
-  IMAGING_TECHNICIAN: [
-    PERMISSIONS.PATIENTS_READ,
-    PERMISSIONS.VISITS_READ,
-    PERMISSIONS.ORDERS_READ,
-  ],
+  LAB_TECHNICIAN: TECHNICIAN_READS,
+  IMAGING_TECHNICIAN: TECHNICIAN_READS,
 
   PHARMACIST: [
     PERMISSIONS.PATIENTS_READ,
     PERMISSIONS.VISITS_READ,
-    PERMISSIONS.ORDERS_READ,
     PERMISSIONS.MEDICATIONS_READ,
   ],
 
@@ -171,6 +174,11 @@ export const ROLE_PERMISSIONS = {
  * session, so an account row that names a value the app does not know is a
  * question this has to answer with "no" rather than with a lookup that could
  * return something.
+ *
+ * `Object.hasOwn` rather than `in`, because `in` walks the prototype chain: an
+ * account row holding the name of a built-in would otherwise be answered with
+ * `Object.prototype`'s member, and asking that whether it holds a permission is
+ * an exception rather than a refusal.
  */
 export function can(
   role: string | null | undefined,
@@ -216,8 +224,9 @@ export async function authorize(
  * Whether the clinician behind a session holds a permission.
  *
  * A deactivated account holds nothing, whatever role it kept: turning the flag
- * off is how a leaver is stopped, so it has to stop every permission at once
- * rather than leave the ones that happen to be listed.
+ * off is how this app stops a leaver, so it stops every permission at once rather
+ * than leaving the ones that happen to be listed. What an account can still sign
+ * in to is not this question — the permissions are.
  */
 function may(session: Session, permission: Permission): boolean {
   return session.user.isActive === true && can(session.user.role, permission);
@@ -226,7 +235,7 @@ function may(session: Session, permission: Permission): boolean {
 function permissionsFor(
   role: string | null | undefined,
 ): readonly Permission[] | null {
-  if (role == null || !(role in ROLE_PERMISSIONS)) return null;
+  if (role == null || !Object.hasOwn(ROLE_PERMISSIONS, role)) return null;
 
   return ROLE_PERMISSIONS[role as Role];
 }

@@ -11,7 +11,7 @@ What the clinic can be told about who did what, and what it cannot yet be told. 
 
 For a clinical record, the clinic must be able to answer four questions without guessing:
 
-1. **Who made this change?** Every create, edit, archive, and restore of a patient, appointment, visit, vitals record, or order carries the account that performed it. An actor is not optional on a clinical record: a row whose actor is unknown cannot be defended, audited, or corrected.
+1. **Who made this change?** Every create, edit, archive, and restore of a patient, appointment, visit, vitals record, or order carries the account that performed it. In the target state the actor is not optional on a clinical record: a row whose actor is unknown cannot be defended, audited, or corrected. The two columns the schema lacks for this are named in the gaps below.
 2. **When did it happen, and in what order?** `updatedAt` answers when the row last changed, which is not the same question once a record is edited twice in the same second or restored after archiving. A change has its own instant.
 3. **What happened to this record over its life?** Archive and restore are lifecycle events, not merely a nullable timestamp. A record that is archived and later restored has two events, not a `deletedAt` that is now null.
 4. **Can an edit be told apart from a correction?** Nothing in the schema records that a value was replaced rather than set, so an edit that silently overwrites a reading leaves no trace.

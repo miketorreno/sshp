@@ -291,7 +291,7 @@ describe("patient write commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the patient instead of destroying it", async () => {
       const result = await archivePatient("patient-1");
 

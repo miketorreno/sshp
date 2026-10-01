@@ -14,8 +14,8 @@ import { PATIENT_EMAIL_TAKEN, PATIENT_NOT_FOUND } from "./contract";
  * change needs, validates through the caller-supplied input, and answers with a
  * stable result instead of throwing.
  *
- * Deleting a patient archives it: the row, its email, and its patient code stay
- * reserved, and normal reads stop returning it.
+ * Archiving a patient keeps the row, its email, and its patient code reserved,
+ * and normal reads stop returning it.
  */
 
 export type PatientInput = {
@@ -143,9 +143,8 @@ export async function archivePatient(
  * Archiving never released them, so nothing else can have taken them in the
  * meantime; the uniqueness they were archived under still holds.
  *
- * Only an administrator restores, because an archive is how the clinic takes a
- * mistake or a record it must not keep out of the way; a role that may archive a
- * patient is not thereby trusted to bring one back.
+ * Only an administrator restores. See ADR 0005 for why restoring is not
+ * delegated to the roles that may archive.
  */
 export async function restorePatient(
   patientId: string

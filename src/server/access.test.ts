@@ -78,9 +78,18 @@ describe("role permissions", () => {
 
     it("keeps a role's read out of the clinical record it may not read", () => {
       expect(can(Role.RECEPTIONIST, PERMISSIONS.PATIENTS_READ)).toBe(true);
-      expect(can(Role.RECEPTIONIST, PERMISSIONS.ORDERS_READ)).toBe(false);
-      expect(can(Role.LAB_TECHNICIAN, PERMISSIONS.ORDERS_READ)).toBe(true);
+      expect(can(Role.RECEPTIONIST, PERMISSIONS.ORDERS_WRITE)).toBe(false);
+      expect(can(Role.LAB_TECHNICIAN, PERMISSIONS.VISITS_READ)).toBe(true);
       expect(can(Role.LAB_TECHNICIAN, PERMISSIONS.ORDERS_WRITE)).toBe(false);
+    });
+
+    it("refuses a role named after something on the prototype chain", () => {
+      // `in` would answer with `Object.prototype`'s member, and asking that
+      // whether it holds a permission would throw rather than refuse.
+      for (const permission of EVERY_PERMISSION) {
+        expect(can("toString", permission)).toBe(false);
+        expect(can("constructor", permission)).toBe(false);
+      }
     });
 
     it("holds no permission for a patient account or a role it does not name", () => {
@@ -107,7 +116,7 @@ describe("role permissions", () => {
       getSession.mockResolvedValue(sessionOf(Role.RECEPTIONIST));
 
       const refusal: unknown = await requirePermission(
-        PERMISSIONS.ORDERS_READ,
+        PERMISSIONS.ORDERS_WRITE,
       ).catch((error) => error);
 
       expect(refusal).toBeInstanceOf(ForbiddenError);
@@ -176,12 +185,13 @@ describe("role permissions", () => {
     });
   });
 
-  it("answers for a permission the schema does not name", () => {
+  it("answers for a permission the app does not name", () => {
     // The type of a permission is the union of the names above, so this is the
-    // check that a name is one of them: the matrix is asked about it by string.
-    const unknown = "patients:teleport" as Permission;
+    // check that a name arriving as a string is one of them: an administrator
+    // holds every permission there is, and there is no such one as this.
+    const unlisted = "patients:teleport" as Permission;
 
-    expect(Object.values(PERMISSIONS)).not.toContain(unknown);
-    expect(can(Role.ADMIN, unknown)).toBe(false);
+    expect(can(Role.ADMIN, unlisted)).toBe(false);
+    expect(can(Role.SUPERUSER, unlisted)).toBe(false);
   });
 });

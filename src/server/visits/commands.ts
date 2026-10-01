@@ -17,15 +17,15 @@ import {
 
 /**
  * Visit write commands. Each one requires a session holding the permission its
- * change needs, addresses the visit the path
- * names rather than an id in the body, verifies that visit is still an active one
- * for an active patient, and answers with a stable result instead of throwing.
+ * change needs, addresses the visit the path names rather than an id in the body,
+ * verifies that visit is still an active one for an active patient, and answers
+ * with a stable result instead of throwing.
  *
  * A checked-out visit is history. It still reads, and it no longer accepts a
  * clinical write or an archive, so a mistake made after checkout is corrected in
  * the record, not by rewriting the past.
  *
- * Deleting a visit archives it: the row stays for history and normal reads stop
+ * Archiving a visit keeps the row for history and stops normal reads from
  * returning it.
  */
 
@@ -195,9 +195,7 @@ export async function archiveVisit(
  * Restoring does not undo a checkout. The end of a visit is a fact recorded once,
  * so a restored visit reads as the closed visit it was.
  *
- * Only an administrator restores: an archive is how the clinic takes a mistake or
- * a record it must not keep in the way, and the role that may archive one is not
- * thereby trusted to bring one back.
+ * Only an administrator restores; see ADR 0005.
  */
 export async function restoreVisit(
   visitId: string

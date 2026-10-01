@@ -144,9 +144,7 @@ export async function archiveVitals(
  * restored into a visit that is itself out of the way — the archive is unwound
  * from the top down, visit before reading.
  *
- * Only an administrator restores: an archive is how the clinic takes a mistake or
- * a record it must not keep in the way, and the role that may archive a reading is
- * not thereby trusted to bring one back.
+ * Only an administrator restores; see ADR 0005.
  */
 export async function restoreVitals(
   visitId: string,

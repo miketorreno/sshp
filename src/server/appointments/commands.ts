@@ -15,13 +15,12 @@ import {
 } from "./contract";
 
 /**
- * Appointment write commands. Each one requires a session holding the
- * permission its change needs, verifies the
- * appointment it addresses is an active one for an active patient, and answers
- * with a stable result instead of throwing.
+ * Appointment write commands. Each one requires a session holding the permission
+ * its change needs, verifies the appointment it addresses is an active one for an
+ * active patient, and answers with a stable result instead of throwing.
  *
- * Deleting an appointment archives it: the row stays for history and normal reads
- * stop returning it.
+ * Archiving an appointment keeps the row for history and stops normal reads from
+ * returning it.
  */
 
 export type AppointmentInput = {
@@ -156,16 +155,12 @@ export async function archiveAppointment(
  * day's schedule.
  *
  * Idempotent, like archiving is, so a retried restore reports the outcome the
- * caller wanted. It restores the appointment alone. An appointment that was
- * checked in keeps its check-in, because that is a fact about the patient rather
- * than a consequence of the archive; a visit opened from it stays archived until
- * it is restored in its own turn. An archived appointment therefore cannot be
- * checked in again, since the unique index on `Visit.appointmentId` still holds
- * the visit it opened.
- *
- * Only an administrator restores: an archive is how the clinic takes a mistake or
- * a record it must not keep in the way, and the role that may archive one is not
- * thereby trusted to bring one back.
+ * caller wanted. It restores the appointment alone: an appointment whose patient
+ * is still archived is refused with the same NOT_FOUND the archive reported, so an
+ * archive unwinds from the top down rather than leaving an appointment that no read
+ * can reach. A checked-in appointment keeps its check-in, because that is a fact
+ * about the patient rather than a consequence of the archive; the visit it opened
+ * stays archived until it is restored in its own turn.
  */
 export async function restoreAppointment(
   appointmentId: string
@@ -174,10 +169,12 @@ export async function restoreAppointment(
   if (!actor.ok) return actor;
 
   try {
-    // The lookup ignores `deletedAt` on purpose: an archived appointment is
-    // precisely the row this command is here to find.
+    // The lookup ignores `deletedAt` on purpose — an archived appointment is
+    // precisely the row this command is here to find — and insists on an active
+    // patient, because an appointment of an archived patient is not reachable by
+    // any read.
     const appointment = await getPrisma().appointment.findFirst({
-      where: { id: appointmentId },
+      where: { id: appointmentId, patient: { deletedAt: null } },
       select: { id: true, deletedAt: true },
     });
 

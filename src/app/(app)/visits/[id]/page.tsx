@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import { checkoutVisit } from "@/app/actions/visit-actions";
-import { archiveVitals as archiveVitalsAction } from "@/app/actions/vitals-actions";
+import { archiveVitals } from "@/app/actions/vitals-actions";
 import {
   archiveImagingOrder,
   archiveLabOrder,
@@ -136,11 +136,11 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
     });
   };
 
-  const archiveVitals = (visit: VisitDetailDto, vitalsId: string) => {
+  const archiveVitalsOf = (visit: VisitDetailDto, vitalsId: string) => {
     if (!confirm("Are you sure you want to archive these vitals?")) return;
 
     startArchivingVitals(async () => {
-      const result = await archiveVitalsAction(visit.id, vitalsId);
+      const result = await archiveVitals(visit.id, vitalsId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -518,7 +518,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                     className="text-red-600"
                                     disabled={isArchivingVitals}
                                     onClick={() =>
-                                      archiveVitals(visit, vital.id)
+                                      archiveVitalsOf(visit, vital.id)
                                     }
                                   >
                                     Archive

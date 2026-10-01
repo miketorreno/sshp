@@ -35,7 +35,6 @@ Permissions name capabilities (`patients:write`), not roles. A read or a write a
 | `vitals:write`             | ✓     | ✓         | ✓      | ✓     |              |                    |            |         |      |
 | `vitals:archive`           | ✓     | ✓         | ✓      | ✓     |              |                    |            |         |      |
 | `vitals:restore`           | ✓     | ✓         |        |       |              |                    |            |         |      |
-| `orders:read`              | ✓     | ✓         | ✓      | ✓     |              | ✓                  | ✓          |         |      |
 | `orders:write`             | ✓     | ✓         | ✓      |       |              |                    |            |         |      |
 | `orders:archive`           | ✓     | ✓         | ✓      |       |              |                    |            |         |      |
 | `orders:restore`           | ✓     | ✓         |        |       |              |                    |            |         |      |
@@ -48,6 +47,7 @@ The judgement calls the table records:
 - **Restore is separate from archive rather than the absence of it.** "Delete" could mean "remove" or "bring back"; two permissions say which.
 - **The clinical record reads as a whole or not at all.** A role that reads patients, visits, orders, medications, and reports reads all of them, because a clinician shown a visit but not the patient it belongs to has been shown half a story.
 - **The front desk runs registration and the appointment desk.** `RECEPTIONIST` reads and writes patients and appointments and checks a patient in from an appointment, which ends in the visit that check-in opens, so it reads visits too. Opening a visit is a clinical act, so the walk-in check-in page is not theirs.
+- **Orders are not a read of their own.** They are read as part of the visit they belong to, so a role that may read a visit may read its orders, and there is no `orders:read` for a matrix to grant.
 - **Technicians and the pharmacist read the work their department is handed** and write nothing yet. The commands that would let them write — results, completions, administrations — do not exist, so nothing is reserved for them; when those commands arrive they ask for the permission they need, and the matrix is where the answer is decided.
 - **`PATIENT` holds nothing.** There is no patient-facing surface in this app; the day there is one it is a screen with its own permissions, not a widened grant on the staff matrix.
 - **`USER` is what a new account gets**: a patient lookup and today's expected list, and no writes. A clinical role is what turns an account into a clinician's.

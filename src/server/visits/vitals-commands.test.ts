@@ -232,6 +232,22 @@ describe("vitals commands", () => {
       });
     });
 
+    it("restores a reading into a visit that has been checked out", async () => {
+      // The visit is history, so it will not take another recording; but the
+      // archive was never a consequence of the checkout, and bringing the reading
+      // back does not reopen anything.
+      seed({
+        visits: [visit({ endDateTime: CHECKED_OUT })],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: true,
+        data: { id: "vitals-1" },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
+    });
+
     it("refuses to restore a reading whose visit is out of the way itself", async () => {
       seed({
         visits: [visit({ deletedAt: ARCHIVED_AT })],

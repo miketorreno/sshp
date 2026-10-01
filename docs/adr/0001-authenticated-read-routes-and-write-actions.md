@@ -41,6 +41,8 @@ Retain and reshape the current action modules, and add domain modules for the wr
 | `src/app/actions/vitals-actions.ts`      | `addVitals`, `archiveVitals`                                                                                   |
 | `src/app/actions/order-actions.ts`       | request and archive commands for lab, imaging, and medication orders                                          |
 
+Restore commands (`restorePatient`, `restoreAppointment`, `restoreVisit`, `restoreVitals`, and the three order kinds) are domain commands with no action wrapper yet: there is no read of archived records for an action to revalidate, so an action would be a write with nothing behind it. The screen that makes them reachable is #33.
+
 Every command validates its input, treats the resource path ID as authoritative, verifies nested-resource ownership, rejects clinical writes to a visit or its children after checkout, populates supported actor fields, and returns a discriminated success/error result. Form commands may redirect on success; redirects must not be caught as ordinary failures. Failures use stable codes/messages and never expose raw database errors.
 
 Each write calls `revalidatePath` for any affected server-rendered path; that is a narrow revalidation path for server components and layouts, not a second data source. Successful client-side command calls invalidate only the affected React Query keys.
