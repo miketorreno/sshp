@@ -10,6 +10,28 @@ import { FAILURE_CODES, type ActionFailure } from "@/lib/action-result";
 export type AppointmentListQuery = {
   page?: number;
   limit?: number;
+  /**
+   * What someone typed to find an appointment: any part of the patient's name,
+   * or the patient's code. Blank is not a filter, so an untouched box lists
+   * everything rather than nothing.
+   */
+  search?: string;
+  /**
+   * The window the caller drew, as instants to hand to the read. Naming both
+   * ends asks for that window rather than a page, which is how the calendar
+   * reads. Leaving both unnamed asks for a page, which is how the table reads.
+   */
+  from?: string;
+  to?: string;
+};
+
+/**
+ * The span of days a windowed read covers: `from` is the first moment included,
+ * `to` is the first moment after the last one.
+ */
+export type AppointmentWindow = {
+  from: Date;
+  to: Date;
 };
 
 /** Every appointment read and write reports these same three failures. */
@@ -32,20 +54,30 @@ export const DEFAULT_LIST_LIMIT = 20;
 export const MAX_LIST_LIMIT = 100;
 
 /**
- * The calendar draws a month, not a page of the table, so it asks for a wider
- * window than a table page. It is a window and not the whole clinic: paging the
- * calendar properly is deferred with the rest of the calendar work.
+ * The calendar used to ask the list read for a wider page instead of naming the
+ * days it drew, which drew a month with a silent hole wherever the page ended.
+ * It now names a window, so there is no calendar page size to choose here.
  */
-export const CALENDAR_LIST_LIMIT = MAX_LIST_LIMIT;
-
 export const appointmentApiPaths = {
   list: (query: AppointmentListQuery = {}) => {
     const params = new URLSearchParams();
+
+    if (query.from !== undefined && query.to !== undefined) {
+      params.set("from", query.from);
+      params.set("to", query.to);
+
+      return `/api/appointments?${params.toString()}`;
+    }
+
     const page = query.page ?? 1;
     const limit = query.limit ?? DEFAULT_LIST_LIMIT;
 
     params.set("page", String(page));
     params.set("limit", String(limit));
+
+    // An untouched search is not sent at all, so it cannot arrive at the read as
+    // a filter that matches nothing.
+    if (query.search) params.set("search", query.search);
 
     return `/api/appointments?${params.toString()}`;
   },

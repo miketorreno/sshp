@@ -1,5 +1,9 @@
 "use client";
-import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { apiGet } from "@/lib/api-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -31,8 +35,15 @@ export const appointmentQueries = {
     }),
 };
 
-export const useAppointmentList = (query: AppointmentListQuery = {}) =>
-  useQuery(appointmentQueries.list(query));
+/**
+ * The list read. `enabled` lets a caller that is still learning what it wants —
+ * the calendar, which does not know its window until it has drawn a month —
+ * hold the read until it can ask a real question.
+ */
+export const useAppointmentList = (
+  query: AppointmentListQuery = {},
+  options: { enabled?: boolean } = {},
+) => useQuery({ ...appointmentQueries.list(query), enabled: options.enabled });
 
 export const useAppointmentDetail = (appointmentId: string) =>
   useQuery(appointmentQueries.detail(appointmentId));
@@ -43,7 +54,7 @@ export const useAppointmentDetail = (appointmentId: string) =>
  */
 export async function invalidateAppointmentWrites(
   queryClient: QueryClient,
-  appointmentId: string
+  appointmentId: string,
 ): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.appointments.lists() }),

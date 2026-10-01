@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clinicDateTimeSchema, clinicTimeZone } from "@/lib/clinic-time";
 import { VISIT_TYPES } from "./contract";
 
 /**
@@ -78,14 +79,17 @@ const optionalMeasurement = z
   )
   .transform((value) => value ?? null);
 
+/** A moment a clinician typed, resolved in the clinic's own time zone. */
+const clinicDateTime = clinicDateTimeSchema(clinicTimeZone);
+
 const visitFields = {
-  startDateTime: z.coerce.date(),
+  startDateTime: clinicDateTime,
   visitType: z.enum(VISIT_TYPES),
   reason: optionalText,
 };
 
 const vitalsFields = {
-  recordedAt: z.coerce.date(),
+  recordedAt: clinicDateTime,
   height: optionalMeasurement,
   weight: optionalMeasurement,
   systolicBP: optionalMeasurement,

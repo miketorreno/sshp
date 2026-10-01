@@ -4,12 +4,14 @@ import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
   type AppointmentListQuery,
+  type AppointmentWindow,
 } from "./contract";
 import {
   toAppointmentDetail,
   toAppointmentSummary,
   type AppointmentDetailDto,
   type AppointmentSummaryDto,
+  type AppointmentWithRelations,
 } from "./dto";
 
 /**
@@ -30,7 +32,7 @@ const APPOINTMENT_RELATIONS = {
 } as const;
 
 export async function listAppointments(
-  query: AppointmentListQuery = {}
+  query: AppointmentListQuery = {},
 ): Promise<AppointmentSummaryDto[]> {
   await requireSession();
 
@@ -38,25 +40,109 @@ export async function listAppointments(
   const limit = clamp(query.limit);
 
   const appointments = await getPrisma().appointment.findMany({
-    where: ACTIVE_APPOINTMENT,
+    // The search narrows the active list; it never replaces the active rule, so
+    // searching cannot surface an appointment of an archived patient.
+    where: {
+      ...ACTIVE_APPOINTMENT,
+      ...searchedPatient(query.search),
+    },
     include: APPOINTMENT_RELATIONS,
     orderBy: { startDateTime: "asc" },
     skip: (page - 1) * limit,
     take: limit,
   });
 
+  return toSummaries(appointments);
+}
+
+/**
+ * How a search term finds a patient, or nothing when no term was typed.
+ *
+ * Any part of the name counts, and so does the patient code, because reception
+ * reads appointments by code as often as by name. A blank term is not a filter,
+ * so an untouched box lists every active appointment rather than none.
+ */
+function searchedPatient(term: string | undefined) {
+  const searched = term?.trim();
+
+  if (!searched) return null;
+
+  const contains = { contains: searched, mode: "insensitive" } as const;
+
+  return {
+    patient: {
+      AND: [
+        { deletedAt: null },
+        {
+          OR: [
+            { firstName: contains },
+            { middleName: contains },
+            { lastName: contains },
+            { patientCode: contains },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * The appointments starting inside a window, which is how the calendar reads.
+ *
+ * A window is not a page. The calendar draws whatever days the reader navigated
+ * to, so a month is a month: reading a page of the list for it would draw a
+ * month with a silent hole wherever the page ended, and reading the whole clinic
+ * would grow without bound. The window is half-open — `from` is included, `to`
+ * is the first moment past it — so consecutive windows neither drop an
+ * appointment that starts exactly on the boundary nor draw one twice.
+ *
+ * A window is still a bounded ask: the caller names its ends, and the read
+ * answers exactly what falls between them rather than deciding a size.
+ */
+export async function listAppointmentsInWindow(
+  window: AppointmentWindow,
+): Promise<AppointmentSummaryDto[]> {
+  await requireSession();
+
+  const appointments = await getPrisma().appointment.findMany({
+    where: {
+      ...ACTIVE_APPOINTMENT,
+      // Overlap, not "starts inside": an appointment that began before the window
+      // and runs into it is drawn on the day the clinician is looking at, so it
+      // has to be in the answer. Matching only `startDateTime` would leave a
+      // multi-day or late-running appointment invisible for exactly as long as it
+      // overlapped the screen.
+      OR: [
+        {
+          AND: [
+            { startDateTime: { lt: window.to } },
+            { endDateTime: { gt: window.from } },
+          ],
+        },
+      ],
+    },
+    include: APPOINTMENT_RELATIONS,
+    orderBy: { startDateTime: "asc" },
+  });
+
+  return toSummaries(appointments);
+}
+
+async function toSummaries(
+  appointments: AppointmentWithRelations[],
+): Promise<AppointmentSummaryDto[]> {
   const checkedIn = await checkedInAppointmentIds(
-    appointments.map((appointment) => appointment.id)
+    appointments.map((appointment) => appointment.id),
   );
 
   return appointments.map((appointment) =>
-    toAppointmentSummary(appointment, checkedIn.has(appointment.id))
+    toAppointmentSummary(appointment, checkedIn.has(appointment.id)),
   );
 }
 
 /** Reads an active appointment, or null when it is missing or inactive. */
 export async function getAppointmentDetail(
-  id: string
+  id: string,
 ): Promise<AppointmentDetailDto | null> {
   await requireSession();
 
@@ -67,10 +153,7 @@ export async function getAppointmentDetail(
 
   if (!appointment) return null;
 
-  return toAppointmentDetail(
-    appointment,
-    await isCheckedIn(appointment.id)
-  );
+  return toAppointmentDetail(appointment, await isCheckedIn(appointment.id));
 }
 
 /**
@@ -80,7 +163,7 @@ export async function getAppointmentDetail(
  * reads, it does not un-check-in the appointment that opened it.
  */
 async function checkedInAppointmentIds(
-  appointmentIds: string[]
+  appointmentIds: string[],
 ): Promise<Set<string>> {
   if (appointmentIds.length === 0) return new Set();
 
@@ -90,7 +173,9 @@ async function checkedInAppointmentIds(
   });
 
   return new Set(
-    visits.flatMap((visit) => (visit.appointmentId ? [visit.appointmentId] : []))
+    visits.flatMap((visit) =>
+      visit.appointmentId ? [visit.appointmentId] : [],
+    ),
   );
 }
 

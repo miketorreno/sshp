@@ -13,11 +13,12 @@ vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
+import { withClinicTimeZone } from "@/lib/test-support/clinic-time";
 import {
   SESSION,
   hoursFromStartOfToday,
-  localDay,
-  startOfToday,
+  clinicToday,
+  clinicYesterday,
   seedVisits,
   visit,
 } from "@/server/visits/test-support/seed";
@@ -111,10 +112,8 @@ describe("visit reads", () => {
         ],
       });
 
-      const today = localDay(new Date());
-      const yesterday = localDay(
-        new Date(startOfToday().getTime() - 3 * 3_600_000),
-      );
+      const today = clinicToday();
+      const yesterday = clinicYesterday();
 
       await expect(
         listVisits({ from: today, to: today }).then((reads) =>
@@ -129,6 +128,32 @@ describe("visit reads", () => {
       ).resolves.toEqual(["visit-yesterday"]);
     });
 
+    it("resolves a day window in the clinic's zone, not the server's", async () => {
+      // 01:30 on the third of March in Manila, but still the second of March in
+      // UTC. Which day a visit counts on is the clinic's question to answer.
+      seed({
+        visits: [visit({ startDateTime: new Date("2026-03-02T17:30:00.000Z") })],
+      });
+
+      const day = "2026-03-03";
+
+      await expect(
+        withClinicTimeZone("Asia/Manila", () =>
+          listVisits({ from: day, to: day }).then((reads) =>
+            reads.map((read) => read.id),
+          ),
+        ),
+      ).resolves.toEqual(["visit-1"]);
+
+      await expect(
+        withClinicTimeZone("UTC", () =>
+          listVisits({ from: day, to: day }).then((reads) =>
+            reads.map((read) => read.id),
+          ),
+        ),
+      ).resolves.toEqual([]);
+    });
+
     it("keeps a visit that checked in late and checked out the next morning", async () => {
       seed({
         visits: [
@@ -140,7 +165,7 @@ describe("visit reads", () => {
         ],
       });
 
-      const today = localDay(new Date());
+      const today = clinicToday();
 
       await expect(
         listVisits({ from: today, to: today }).then((reads) =>
@@ -148,9 +173,7 @@ describe("visit reads", () => {
         ),
       ).resolves.toEqual([]);
 
-      const yesterday = localDay(
-        new Date(startOfToday().getTime() - 3 * 3_600_000),
-      );
+      const yesterday = clinicYesterday();
 
       await expect(
         listVisits({ from: yesterday, to: yesterday }).then((reads) =>

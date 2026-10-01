@@ -16,6 +16,22 @@ _Avoid_: Booking, reservation
 An encounter with a patient, including the care and observations recorded during it.
 _Avoid_: Encounter record, case
 
+**Instant**:
+A point in time, stored and transported in UTC. It has no zone of its own until something renders it, and rendering it shows the clinic's wall clock.
+_Avoid_: Date, timestamp (when a wall clock is meant)
+
+**Wall clock**:
+What a clinician typed or reads, such as 09:00 on 2026-03-02. It means nothing on its own: it is resolved against the clinic's time zone. A date-only field such as `dateOfBirth` is a wall clock of whole days.
+_Avoid_: Local time, naive datetime
+
+**Clinic day**:
+One calendar day where the clinic is. A day window is half-open, so it includes its first moment and excludes the first moment of the next day.
+_Avoid_: Server day, UTC day
+
+**Measurement**:
+A recorded observation with the unit its name promises, such as weight in kg. Zero is a reading; only a blank means not measured.
+_Avoid_: Vital (a vital sign is a kind of measurement; a measurement is not a vital sign)
+
 **Check-in**:
 The transition that begins a visit, optionally from an appointment.
 _Avoid_: Admission (unless the patient is admitted as an inpatient)

@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -16,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDateTime } from "@/lib/utils";
+import { formatClinicDateTime } from "@/lib/clinic-time";
 import { LogOut, MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,10 @@ import {
 } from "@/app/actions/order-actions";
 import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
 import type { VisitDetailDto } from "@/server/visits/dto";
+import {
+  formatMeasurement,
+  VITALS_MEASUREMENTS,
+} from "@/server/visits/vitals-measurements";
 
 /** The kinds of order a visit holds, and the name each is reported under. */
 const ORDER_KINDS = {
@@ -44,12 +49,44 @@ const ORDER_KINDS = {
 type OrderKind = keyof typeof ORDER_KINDS;
 
 /**
+ * A section of the visit that is drawn but cannot be written yet: notes,
+ * procedures, charges and reports have no read model and no command behind them.
+ *
+ * The action stays visible and disabled, with the reason next to it. It used to
+ * be a link to the page that registers a patient, so "Add Note" opened a form
+ * about a person rather than a note — a dead end that looked like a working
+ * button. A disabled button that says why is the honest version of the same
+ * affordance, and it names the work that is missing.
+ */
+const UnavailableSection = ({
+  action,
+  noun,
+}: {
+  action: string;
+  noun: string;
+}) => (
+  <div className="mb-4">
+    <Button type="button" size="sm" disabled>
+      <Plus />
+      {action}
+    </Button>
+    <p className="mt-2 text-sm text-muted-foreground">
+      {noun} are not recorded yet.
+    </p>
+  </div>
+);
+
+/**
  * One visit and the records recorded during it. The visit is read through the
  * canonical detail read, so this page sees the same visit as every other screen,
  * and a checkout, a vitals removal or an archived order re-reads it rather than
  * reloading the page.
  */
 const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = use(params);
@@ -83,11 +120,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
   // "Delete" on an order means the order leaves this visit's clinical reads, so
   // it reports the archive and the visit is re-read rather than reloaded.
-  const archiveOrder = (
-    visitId: string,
-    kind: OrderKind,
-    orderId: string,
-  ) => {
+  const archiveOrder = (visitId: string, kind: OrderKind, orderId: string) => {
     if (!confirm("Are you sure you want to delete this order?")) return;
 
     startArchivingOrder(async () => {
@@ -180,7 +213,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </p>
                       <p className="font-semibold text-sm leading-6">
                         {visit.startDateTime &&
-                          formatDateTime(visit.startDateTime)}
+                          formatClinicDateTime(visit.startDateTime, zone)}
                       </p>
                     </div>
                     {visit.endDateTime && (
@@ -189,7 +222,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                           Checked Out
                         </p>
                         <p className="font-semibold text-sm leading-6">
-                          {formatDateTime(visit.endDateTime)}
+                          {formatClinicDateTime(visit.endDateTime, zone)}
                         </p>
                       </div>
                     )}
@@ -277,14 +310,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         visit.labOrders.map((labOrder) => (
                           <TableRow key={labOrder.id}>
                             <TableCell>
-                              {formatDateTime(labOrder.orderedAt)}
+                              {formatClinicDateTime(labOrder.orderedAt, zone)}
                             </TableCell>
                             <TableCell>{labOrder.labType}</TableCell>
                             <TableCell>Lab</TableCell>
                             <TableCell>{labOrder.orderStatus}</TableCell>
                             <TableCell>
                               {labOrder.completedAt &&
-                                formatDateTime(labOrder.completedAt)}
+                                formatClinicDateTime(labOrder.completedAt, zone)}
                             </TableCell>
                             <TableCell>{labOrder.result}</TableCell>
                             <TableCell>{labOrder.notes}</TableCell>
@@ -300,14 +333,11 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      router.push(
-                                        `/orders/lab/${labOrder.id}/edit`,
-                                      )
-                                    }
-                                  >
+                                  <DropdownMenuItem disabled>
                                     Edit
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      lab orders cannot be edited yet
+                                    </span>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
@@ -327,14 +357,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         visit.imagingOrders.map((imagingOrder) => (
                           <TableRow key={imagingOrder.id}>
                             <TableCell>
-                              {formatDateTime(imagingOrder.orderedAt)}
+                              {formatClinicDateTime(imagingOrder.orderedAt, zone)}
                             </TableCell>
                             <TableCell>{imagingOrder.imagingType}</TableCell>
                             <TableCell>Imaging</TableCell>
                             <TableCell>{imagingOrder.orderStatus}</TableCell>
                             <TableCell>
                               {imagingOrder.completedAt &&
-                                formatDateTime(imagingOrder.completedAt)}
+                                formatClinicDateTime(imagingOrder.completedAt, zone)}
                             </TableCell>
                             <TableCell>{imagingOrder.result}</TableCell>
                             <TableCell>{imagingOrder.notes}</TableCell>
@@ -352,20 +382,21 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      router.push(
-                                        `/orders/imaging/${imagingOrder.id}/edit`,
-                                      )
-                                    }
-                                  >
+                                  <DropdownMenuItem disabled>
                                     Edit
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      imaging orders cannot be edited yet
+                                    </span>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
                                     disabled={isArchivingOrder}
                                     onClick={() =>
-                                      archiveOrder(visit.id, "imaging", imagingOrder.id)
+                                      archiveOrder(
+                                        visit.id,
+                                        "imaging",
+                                        imagingOrder.id,
+                                      )
                                     }
                                   >
                                     Delete
@@ -379,14 +410,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         visit.medOrders.map((medOrder) => (
                           <TableRow key={medOrder.id}>
                             <TableCell>
-                              {formatDateTime(medOrder.orderedAt)}
+                              {formatClinicDateTime(medOrder.orderedAt, zone)}
                             </TableCell>
                             <TableCell>{medOrder.medication}</TableCell>
                             <TableCell>Medication</TableCell>
                             <TableCell>{medOrder.orderStatus}</TableCell>
                             <TableCell>
                               {medOrder.completedAt &&
-                                formatDateTime(medOrder.completedAt)}
+                                formatClinicDateTime(medOrder.completedAt, zone)}
                             </TableCell>
                             <TableCell>{medOrder.orderedBy?.name}</TableCell>
                             <TableCell>{medOrder.notes}</TableCell>
@@ -402,20 +433,21 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      router.push(
-                                        `/orders/imaging/${medOrder.id}/edit`,
-                                      )
-                                    }
-                                  >
+                                  <DropdownMenuItem disabled>
                                     Edit
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      medication orders cannot be edited yet
+                                    </span>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="text-red-600"
                                     disabled={isArchivingOrder}
                                     onClick={() =>
-                                      archiveOrder(visit.id, "medication", medOrder.id)
+                                      archiveOrder(
+                                        visit.id,
+                                        "medication",
+                                        medOrder.id,
+                                      )
                                     }
                                   >
                                     Delete
@@ -443,16 +475,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Taken At</TableHead>
-                        <TableHead>Height</TableHead>
-                        <TableHead>Weight</TableHead>
-                        <TableHead>Temperature</TableHead>
-                        <TableHead>SBP</TableHead>
-                        <TableHead>DBP</TableHead>
-                        <TableHead>Pulse</TableHead>
-                        <TableHead>Respiratory</TableHead>
-                        <TableHead>Oxygen</TableHead>
-                        <TableHead>Glucose</TableHead>
-                        <TableHead>Cholesterol</TableHead>
+                        {/* The headers come from the measurement catalogue, so
+                            the unit a reading is shown in is the unit the
+                            recording form asked for. */}
+                        {VITALS_MEASUREMENTS.map((measurement) => (
+                          <TableHead key={measurement.field}>
+                            {measurement.label}
+                          </TableHead>
+                        ))}
                         <TableHead>Taken By</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
@@ -462,18 +492,16 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                         visit.vitals.map((vital) => (
                           <TableRow key={vital.id}>
                             <TableCell>
-                              {formatDateTime(vital.recordedAt)}
+                              {formatClinicDateTime(vital.recordedAt, zone)}
                             </TableCell>
-                            <TableCell>{vital.height}</TableCell>
-                            <TableCell>{vital.weight}</TableCell>
-                            <TableCell>{vital.temperatureCelsius}</TableCell>
-                            <TableCell>{vital.systolicBP}</TableCell>
-                            <TableCell>{vital.diastolicBP}</TableCell>
-                            <TableCell>{vital.heartRate}</TableCell>
-                            <TableCell>{vital.respiratoryRate}</TableCell>
-                            <TableCell>{vital.oxygenSaturation}</TableCell>
-                            <TableCell>{vital.glucose}</TableCell>
-                            <TableCell>{vital.cholesterol}</TableCell>
+                            {/* Reading the cells from the same catalogue as the
+                                headers is what keeps a column's value from
+                                drifting under the wrong unit. */}
+                            {VITALS_MEASUREMENTS.map((measurement) => (
+                              <TableCell key={measurement.field}>
+                                {formatMeasurement(vital[measurement.field])}
+                              </TableCell>
+                            ))}
                             <TableCell>{vital.recordedBy?.name}</TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -506,12 +534,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
 
                 <TabsContent value="notes">
                   {!visit.endDateTime && (
-                    <Link href="/patients/add">
-                      <Button type="button" size={"sm"} className="mb-4">
-                        <Plus />
-                        Add Note
-                      </Button>
-                    </Link>
+                    <UnavailableSection action="Add Note" noun="Notes" />
                   )}
 
                   <Table>
@@ -525,25 +548,14 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     </TableHeader>
                     <TableBody></TableBody>
                   </Table>
-
-                  {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Note
-                  </Button>
-                </Link>
-              </div> */}
                 </TabsContent>
 
                 <TabsContent value="procedures">
                   {!visit.endDateTime && (
-                    <Link href="/patients/add">
-                      <Button type="button" size={"sm"} className="mb-4">
-                        <Plus />
-                        Add Procedure
-                      </Button>
-                    </Link>
+                    <UnavailableSection
+                      action="Add Procedure"
+                      noun="Procedures"
+                    />
                   )}
 
                   <Table>
@@ -556,25 +568,11 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     </TableHeader>
                     <TableBody></TableBody>
                   </Table>
-
-                  {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Procedure
-                  </Button>
-                </Link>
-              </div> */}
                 </TabsContent>
 
                 <TabsContent value="charges">
                   {!visit.endDateTime && (
-                    <Link href="/patients/add">
-                      <Button type="button" size={"sm"} className="mb-4">
-                        <Plus />
-                        Add Item
-                      </Button>
-                    </Link>
+                    <UnavailableSection action="Add Item" noun="Charges" />
                   )}
 
                   <Table>
@@ -588,24 +586,10 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     </TableHeader>
                     <TableBody></TableBody>
                   </Table>
-
-                  {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    Item
-                  </Button>
-                </Link>
-              </div> */}
                 </TabsContent>
 
                 <TabsContent value="reports">
-                  <Link href="/patients/add">
-                    <Button type="button" size={"sm"} className="mb-4">
-                      <Plus />
-                      OPD Report
-                    </Button>
-                  </Link>
+                  <UnavailableSection action="OPD Report" noun="Reports" />
 
                   <Table>
                     <TableHeader>
@@ -618,15 +602,6 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                     </TableHeader>
                     <TableBody></TableBody>
                   </Table>
-
-                  {/* <div className="mt-20 flex flex-row-reverse gap-2">
-                <Link href="/patients/add">
-                  <Button type="button" size={"sm"}>
-                    <Plus />
-                    OPD Report
-                  </Button>
-                </Link>
-              </div> */}
                 </TabsContent>
               </Tabs>
 

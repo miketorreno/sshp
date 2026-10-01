@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatFetchedLocalDateTime } from "@/lib/utils";
+import { toDateTimeLocalValue } from "@/lib/clinic-time";
 import { useRouter } from "next/navigation";
 import { use, useActionState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,10 @@ type VisitActionState = Awaited<ReturnType<typeof updateVisit>> | null;
  * is history, so it has nothing to edit.
  */
 const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = use(params);
@@ -110,7 +115,7 @@ const EditVisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   name="startDateTime"
                   type="datetime-local"
                   required
-                  defaultValue={formatFetchedLocalDateTime(visit.startDateTime)}
+                  defaultValue={toDateTimeLocalValue(visit.startDateTime, zone)}
                 />
                 {fieldError("startDateTime") && (
                   <p className="text-sm text-red-600">

@@ -46,7 +46,6 @@ const APPOINTMENT = {
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "user-1",
-  appointmentId: null,
   startDateTime: new Date("2026-03-02T09:00:00.000Z"),
   endDateTime: new Date("2026-03-02T09:30:00.000Z"),
   appointmentType: "CLINIC",
@@ -216,8 +215,8 @@ describe("appointment form commands", () => {
       expect(created).toMatchObject({
         patientId: "patient-1",
         providerId: "user-1",
-        startDateTime: new Date("2026-03-05T09:00:00"),
-        endDateTime: new Date("2026-03-05T09:30:00"),
+        startDateTime: new Date("2026-03-05T09:00:00Z"),
+        endDateTime: new Date("2026-03-05T09:30:00Z"),
         appointmentType: "IMAGING",
         appointmentStatus: "SCHEDULED",
         reason: "Annual check",
@@ -252,8 +251,8 @@ describe("appointment form commands", () => {
       ).rejects.toBeInstanceOf(RedirectSignal);
 
       expect(table.findAppointment("appointment-1")).toMatchObject({
-        startDateTime: new Date("2026-03-06T11:00:00"),
-        endDateTime: new Date("2026-03-06T11:20:00"),
+        startDateTime: new Date("2026-03-06T11:00:00Z"),
+        endDateTime: new Date("2026-03-06T11:20:00Z"),
         appointmentStatus: "CANCELLED",
         patientId: "patient-1",
       });

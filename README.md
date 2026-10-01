@@ -72,11 +72,12 @@ running and no secret configured, and a misconfigured deployment fails on its
 first request instead — naming the variable, not printing a library diagnostic.
 See [ADR 0003](docs/adr/0003-build-independent-runtime-state.md).
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `DATABASE_URL` | yes | Postgres connection string |
-| `BETTER_AUTH_SECRET` | yes | Secret Better Auth signs session cookies with. `AUTH_SECRET` is accepted as a legacy fallback. |
-| `BETTER_AUTH_URL` | in practice | Canonical app URL. Better Auth derives the origin from the incoming request when it is unset, which breaks callbacks and redirects. |
+| Variable             | Required    | Purpose                                                                                                                                                                                                                                                             |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | yes         | Postgres connection string                                                                                                                                                                                                                                          |
+| `BETTER_AUTH_SECRET` | yes         | Secret Better Auth signs session cookies with. `AUTH_SECRET` is accepted as a legacy fallback.                                                                                                                                                                      |
+| `BETTER_AUTH_URL`    | in practice | Canonical app URL. Better Auth derives the origin from the incoming request when it is unset, which breaks callbacks and redirects.                                                                                                                                 |
+| `CLINIC_TIME_ZONE`   | in practice | The clinic's IANA time zone, e.g. `Asia/Manila`. Every moment is stored in UTC and every wall clock is the clinic's. Defaults to `UTC`, which is consistent but displays UTC wall clocks. See [ADR 0004](docs/adr/0004-clinic-time-zone-and-read-only-calendar.md). |
 
 Generate the auth secret rather than inventing one:
 

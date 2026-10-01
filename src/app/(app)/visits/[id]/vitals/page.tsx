@@ -1,8 +1,9 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime, formatFetchedLocalDateTime } from "@/lib/utils";
+import { formatClinicDateTime, toDateTimeLocalValue } from "@/lib/clinic-time";
 import { useRouter } from "next/navigation";
 import { use, useActionState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,22 +11,62 @@ import { Input } from "@/components/ui/input";
 import { addVitals } from "@/app/actions/vitals-actions";
 import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
 import { visitPage } from "@/server/visits/contract";
+import {
+  VITALS_MEASUREMENTS,
+  type VitalsMeasurement,
+} from "@/server/visits/vitals-measurements";
 
 type VitalsActionState = Awaited<ReturnType<typeof addVitals>> | null;
 
-/** The readings a clinician fills in when taking a set of vitals. */
-const MEASUREMENTS = [
-  { name: "height", label: "Height (cm)" },
-  { name: "weight", label: "Weight (kg)" },
-  { name: "systolicBP", label: "Systolic" },
-  { name: "diastolicBP", label: "Diastolic" },
-  { name: "heartRate", label: "Heart Rate" },
-  { name: "temperatureCelsius", label: "Temperature (°C)" },
-  { name: "respiratoryRate", label: "Respiratory Rate" },
-  { name: "oxygenSaturation", label: "Oxygen Saturation" },
-  { name: "glucose", label: "Glucose" },
-  { name: "cholesterol", label: "Cholesterol" },
-] as const;
+/**
+ * One measurement's input: its label, its column, and the precision that column
+ * holds. A clinician is offered the decimals the database can store rather than
+ * typing a reading it would have to round, and the label carries the unit the
+ * visit's table will later print.
+ */
+const MeasurementInput = ({
+  measurement,
+  error,
+}: {
+  measurement: VitalsMeasurement;
+  error?: string;
+}) => (
+  <div className="grid gap-3">
+    <Label htmlFor={measurement.field}>{measurement.label}</Label>
+    <Input
+      id={measurement.field}
+      name={measurement.field}
+      type="number"
+      step={measurement.wholeNumbersOnly ? "1" : "any"}
+      defaultValue=""
+    />
+    {error && <p className="text-sm text-red-600">{error}</p>}
+  </div>
+);
+
+/**
+ * A row of measurements, split only so a form is readable: the catalogue is one
+ * list, and the grouping is layout rather than meaning.
+ */
+const MeasurementRow = ({
+  measurements,
+  columns,
+  errorFor,
+}: {
+  measurements: readonly VitalsMeasurement[];
+  columns: string;
+  errorFor: (field: string) => string | undefined;
+}) => (
+  <div className={`grid gap-10 ${columns}`}>
+    {measurements.map((measurement) => (
+      <MeasurementInput
+        key={measurement.field}
+        measurement={measurement}
+        error={errorFor(measurement.field)}
+      />
+    ))}
+  </div>
+);
 
 /**
  * Recording vitals is a measurement taken during one visit, so the visit is
@@ -33,6 +74,10 @@ const MEASUREMENTS = [
  * a box holding a zero records a zero.
  */
 const AddVitalsPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = use(params);
@@ -73,7 +118,7 @@ const AddVitalsPage = ({ params }: { params: Promise<{ id: string }> }) => {
   const fieldError = (field: string) =>
     result && !result.ok && result.error.fieldErrors?.[field]
       ? result.error.fieldErrors[field][0]
-      : null;
+      : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -105,7 +150,7 @@ const AddVitalsPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   name="recordedAt"
                   type="datetime-local"
                   required
-                  defaultValue={formatFetchedLocalDateTime(new Date())}
+                  defaultValue={toDateTimeLocalValue(new Date(), zone)}
                 />
                 {fieldError("recordedAt") && (
                   <p className="text-sm text-red-600">
@@ -118,71 +163,29 @@ const AddVitalsPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <Label htmlFor="visit">Visit</Label>
                 <Input
                   id="visit"
-                  value={`${formatDateTime(visit.startDateTime)} - ${visit.visitType}`}
+                  value={`${formatClinicDateTime(visit.startDateTime, zone)} - ${visit.visitType}`}
                   disabled
                 />
               </div>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-10">
-              {MEASUREMENTS.slice(0, 4).map((measurement) => (
-                <div className="grid gap-3" key={measurement.name}>
-                  <Label htmlFor={measurement.name}>{measurement.label}</Label>
-                  <Input
-                    id={measurement.name}
-                    name={measurement.name}
-                    type="number"
-                    step="any"
-                    defaultValue=""
-                  />
-                  {fieldError(measurement.name) && (
-                    <p className="text-sm text-red-600">
-                      {fieldError(measurement.name)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+            <MeasurementRow
+              measurements={VITALS_MEASUREMENTS.slice(0, 4)}
+              columns="md:grid-cols-4"
+              errorFor={fieldError}
+            />
 
-            <div className="grid md:grid-cols-3 gap-10">
-              {MEASUREMENTS.slice(4, 7).map((measurement) => (
-                <div className="grid gap-3" key={measurement.name}>
-                  <Label htmlFor={measurement.name}>{measurement.label}</Label>
-                  <Input
-                    id={measurement.name}
-                    name={measurement.name}
-                    type="number"
-                    step="any"
-                    defaultValue=""
-                  />
-                  {fieldError(measurement.name) && (
-                    <p className="text-sm text-red-600">
-                      {fieldError(measurement.name)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+            <MeasurementRow
+              measurements={VITALS_MEASUREMENTS.slice(4, 7)}
+              columns="md:grid-cols-3"
+              errorFor={fieldError}
+            />
 
-            <div className="grid md:grid-cols-3 gap-10">
-              {MEASUREMENTS.slice(7).map((measurement) => (
-                <div className="grid gap-3" key={measurement.name}>
-                  <Label htmlFor={measurement.name}>{measurement.label}</Label>
-                  <Input
-                    id={measurement.name}
-                    name={measurement.name}
-                    type="number"
-                    step="any"
-                    defaultValue=""
-                  />
-                  {fieldError(measurement.name) && (
-                    <p className="text-sm text-red-600">
-                      {fieldError(measurement.name)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+            <MeasurementRow
+              measurements={VITALS_MEASUREMENTS.slice(7)}
+              columns="md:grid-cols-3"
+              errorFor={fieldError}
+            />
 
             {result && !result.ok && (
               <p className="text-red-600">{result.error.message}</p>

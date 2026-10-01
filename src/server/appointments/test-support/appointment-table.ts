@@ -8,8 +8,10 @@ import type { Appointment, Patient, User, Visit } from "@/generated/prisma";
  * module issues, so the module stays free to change how it asks the database.
  *
  * It understands only the query features the appointment module uses: equality,
- * case-insensitive `contains`, `not`, `in`, `orderBy`, `skip`, `take`, `select`,
- * and `include` of the `patient` and `provider` relations. The visit that a
+ * case-insensitive `contains`, `not`, `in`, `AND`/`OR` groups, a to-one `is`
+ * relation filter, the `gte`/`gt`/`lt` range and overlap of a window, `orderBy`,
+ * `skip`, `take`,
+ * `select`, and `include` of the `patient` and `provider` relations. The visit that a
  * check-in links is read from the visit table, exactly as the database joins it,
  * so the double cannot answer a question the database would not.
  */
@@ -26,7 +28,10 @@ type Table = {
     take?: number;
     include?: Record<string, Relation>;
   }) => Promise<Row[]>;
-  findFirst: (args: { where?: Condition; include?: Record<string, Relation> }) => Promise<Row | null>;
+  findFirst: (args: {
+    where?: Condition;
+    include?: Record<string, Relation>;
+  }) => Promise<Row | null>;
   create: (args: { data: Row }) => Promise<Row>;
   update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
   delete: (args: { where: { id: string } }) => Promise<Row>;
@@ -62,31 +67,27 @@ export function createAppointmentTable(
     users?: Partial<User>[];
     appointments?: Partial<Appointment>[];
     visits?: Partial<Visit>[];
-  } = {}
+  } = {},
 ): AppointmentTable {
   const patients: Row[] = (seed.patients ?? []).map((row) => ({ ...row }));
   const users: Row[] = (seed.users ?? []).map((row) => ({ ...row }));
-  const appointments: Row[] = (seed.appointments ?? []).map((row) => ({ ...row }));
+  const appointments: Row[] = (seed.appointments ?? []).map((row) => ({
+    ...row,
+  }));
   const visits: Row[] = (seed.visits ?? []).map((row) => ({ ...row }));
   const destroyed: string[] = [];
   const relations: Relations = { patients, users, visits };
 
   const store: Store = {
     appointment: {
-      findMany: async ({
-        where,
-        orderBy,
-        skip = 0,
-        take,
-        include,
-      } = {}) => {
+      findMany: async ({ where, orderBy, skip = 0, take, include } = {}) => {
         const found = appointments.filter((row) =>
-          matches(withRelations(row, relations), where)
+          matches(withRelations(row, relations), where),
         );
 
         for (const [field, direction] of Object.entries(orderBy ?? {})) {
           found.sort((left, right) =>
-            compare(left[field], right[field], direction)
+            compare(left[field], right[field], direction),
           );
         }
 
@@ -96,7 +97,7 @@ export function createAppointmentTable(
       },
       findFirst: async ({ where, include }) => {
         const found = appointments.find((row) =>
-          matches(withRelations(row, relations), where)
+          matches(withRelations(row, relations), where),
         );
 
         return found ? hydrateAppointment(found, include, relations) : null;
@@ -146,7 +147,7 @@ export function createAppointmentTable(
 
         for (const [field, direction] of Object.entries(orderBy ?? {})) {
           found.sort((left, right) =>
-            compare(left[field], right[field], direction)
+            compare(left[field], right[field], direction),
           );
         }
 
@@ -263,7 +264,7 @@ function withRelations(row: Row, { patients, users }: Relations): Row {
 function hydrateAppointment(
   row: Row,
   include: Record<string, Relation> | undefined,
-  { patients, users }: Relations
+  { patients, users }: Relations,
 ): Row {
   if (!include) return { ...row };
 
@@ -282,7 +283,17 @@ function hydrateAppointment(
   return hydrated;
 }
 
-const FILTER_KEYS = new Set(["contains", "not", "in", "mode", "notIn"]);
+const FILTER_KEYS = new Set([
+  "contains",
+  "not",
+  "in",
+  "mode",
+  "notIn",
+  "gte",
+  "gt",
+  "lt",
+  "is",
+]);
 
 /**
  * `Visit.appointmentId` is unique in the database, so a second visit cannot claim
@@ -296,12 +307,12 @@ function requireUniqueAppointment(rows: Row[], candidate: Row): void {
   if (claimed == null) return;
 
   const taken = rows.some(
-    (row) => row.id !== candidate.id && row.appointmentId === claimed
+    (row) => row.id !== candidate.id && row.appointmentId === claimed,
   );
 
   if (taken) {
     throw new Error(
-      `unique constraint failed: Visit.appointmentId already claims ${String(claimed)}`
+      `unique constraint failed: Visit.appointmentId already claims ${String(claimed)}`,
     );
   }
 }
@@ -327,6 +338,14 @@ function matches(row: Row, where: Condition): boolean {
       return clauses.some((clause) => matches(row, clause));
     }
 
+    // `AND` is how a read keeps the active rule and adds a search beside it,
+    // rather than one replacing the other.
+    if (field === "AND") {
+      const clauses = (condition as Condition[]) ?? [];
+
+      return clauses.every((clause) => matches(row, clause));
+    }
+
     return matchesField(row[field], condition);
   });
 }
@@ -335,6 +354,12 @@ function matchesField(value: unknown, condition: unknown): boolean {
   if (condition === null || condition === undefined) return value == null;
 
   if (isRecord(condition)) {
+    // A to-one relation filter wrapped in `is`, which is how a search over the
+    // patient an appointment belongs to is written.
+    if (condition.is !== undefined) {
+      return matchesField(value, condition.is);
+    }
+
     if (condition.contains !== undefined) {
       return (
         String(value ?? "")
@@ -344,6 +369,33 @@ function matchesField(value: unknown, condition: unknown): boolean {
     }
 
     if (condition.not !== undefined) return value !== condition.not;
+
+    // A window. `gte`/`lt` is half-open, so consecutive windows neither drop a row
+    // starting exactly on the boundary nor return one twice; `gt` is how an
+    // overlap asks "did this end after the window opened?".
+    if (
+      condition.gte !== undefined ||
+      condition.gt !== undefined ||
+      condition.lt !== undefined
+    ) {
+      if (value == null) return false;
+
+      const valueTime = time(value);
+
+      if (condition.gte !== undefined && valueTime < time(condition.gte)) {
+        return false;
+      }
+
+      if (condition.gt !== undefined && valueTime <= time(condition.gt)) {
+        return false;
+      }
+
+      if (condition.lt !== undefined && valueTime >= time(condition.lt)) {
+        return false;
+      }
+
+      return true;
+    }
 
     if (condition.in !== undefined) {
       return (condition.in as unknown[]).includes(value);
@@ -365,16 +417,14 @@ function hasFilterKey(condition: Record<string, unknown>): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    !(value instanceof Date)
+    typeof value === "object" && value !== null && !(value instanceof Date)
   );
 }
 
 function compare(
   left: unknown,
   right: unknown,
-  direction: "asc" | "desc"
+  direction: "asc" | "desc",
 ): number {
   const leftTime = time(left);
   const rightTime = time(right);

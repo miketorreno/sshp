@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,13 +16,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { calculateAge, formatDate } from "@/lib/utils";
+import { calculateAge, formatClinicDate } from "@/lib/clinic-time";
 import { usePatientDetail } from "@/client/patients/queries";
 import Image from "next/image";
 import Link from "next/link";
 import { use, useState } from "react";
 
 const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const [loading] = useState(true);
 
   const { id } = use(params);
@@ -87,7 +92,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       Age
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {calculateAge(patient.dateOfBirth)}
+                      {calculateAge(patient.dateOfBirth, zone)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -133,7 +138,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       Registered
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDate(patient.createdAt)}
+                      {formatClinicDate(patient.createdAt, zone)}
                     </p>
                   </div>
                 </div>

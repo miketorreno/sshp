@@ -8,14 +8,12 @@ import { FAILURE_CODES, type ActionFailure } from "@/lib/action-result";
 import type { VisitType } from "@/generated/prisma";
 
 /**
- * The window a list read covers, as calendar days rather than instants, so a
+ * The window a list read covers, as clinic days rather than instants, so a
  * caller asks for "the second of March" instead of computing midnight itself.
  * Both bounds are inclusive.
  *
- * The days are read in the server's own zone, which is the zone the clinic day
- * has always been measured in. Settling one zone for the whole repository is
- * deliberately left to the calendar work, so this contract does not move that
- * decision; it only states which days it covers.
+ * A day is resolved in the clinic's time zone by `src/lib/clinic-time`, so the
+ * same query returns the same visits whichever zone the server runs in.
  */
 export type VisitListQuery = {
   /** The first day of the window, as `YYYY-MM-DD`. */

@@ -15,7 +15,7 @@ import { UnauthenticatedError } from "@/lib/session";
 export function jsonFailure(failure: ActionFailure): NextResponse {
   return NextResponse.json(
     { error: failure },
-    { status: statusForFailure(failure.code) }
+    { status: statusForFailure(failure.code) },
   );
 }
 
@@ -32,10 +32,30 @@ export function toFailureResponse(error: unknown): NextResponse {
   return jsonFailure(failure);
 }
 
+/**
+ * Reads an instant query parameter, ignoring anything unparseable.
+ *
+ * A parameter that cannot be read as a moment is ignored rather than guessed
+ * at, so a caller that names a window it got wrong is told so by the read that
+ * has to honour it, not silently handed something else.
+ */
+export function toInstantParam(
+  params: URLSearchParams,
+  name: string,
+): Date | undefined {
+  const value = params.get(name);
+
+  if (value === null) return undefined;
+
+  const parsed = new Date(value);
+
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
 /** Reads an integer query parameter, ignoring anything unparseable. */
 export function toIntegerParam(
   params: URLSearchParams,
-  name: string
+  name: string,
 ): number | undefined {
   const value = params.get(name);
 

@@ -107,7 +107,7 @@ describe("visit form commands", () => {
         patientId: "patient-1",
         providerId: "user-1",
         createdById: "user-1",
-        startDateTime: new Date("2026-03-05T11:00:00"),
+        startDateTime: new Date("2026-03-05T11:00:00Z"),
         visitType: "FOLLOWUP",
       });
       expect(result.ok && result.data.id).toBe(created?.id);
@@ -134,7 +134,7 @@ describe("visit form commands", () => {
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")).toMatchObject({
-        startDateTime: new Date("2026-03-06T11:00:00"),
+        startDateTime: new Date("2026-03-06T11:00:00Z"),
         updatedById: "user-1",
         patientId: "patient-1",
       });

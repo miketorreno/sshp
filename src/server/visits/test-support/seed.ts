@@ -4,7 +4,12 @@
  * test reads as the one situation it describes rather than as a whole clinic.
  */
 
-import { localDay, startOfToday } from "@/lib/clinic-day";
+import {
+  clinicTimeZone,
+  startOfDay,
+  toDateInputValue,
+  today,
+} from "@/lib/clinic-time";
 import type { VisitTable } from "./visit-table";
 
 export const PATIENT = {
@@ -143,11 +148,30 @@ export function medication(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** A moment on a clinic day, so a spec can say "yesterday" without hard-coding one. */
-export const hoursFromStartOfToday = (hours: number) =>
-  new Date(startOfToday().getTime() + hours * 60 * 60 * 1000);
+/**
+ * A moment relative to the clinic's today, so a spec can say "yesterday" without
+ * hard-coding a day. The clinic's day opens in the clinic's zone, so a spec is
+ * about the clinic's timeline rather than the test runner's.
+ */
+export const hoursFromStartOfToday = (hours: number) => {
+  const zone = clinicTimeZone();
 
-export { localDay, startOfToday };
+  return new Date(startOfDay(today(zone), zone)!.getTime() + hours * 3_600_000);
+};
+
+/** The clinic's today and the day before it, as reads name a window. */
+export const clinicToday = () => today(clinicTimeZone());
+
+export const clinicYesterday = () => {
+  const zone = clinicTimeZone();
+
+  // An hour before the clinic's day opens is the day before it, whatever the
+  // zone's offset is.
+  return toDateInputValue(
+    new Date(startOfDay(today(zone), zone)!.getTime() - 3_600_000),
+    zone,
+  );
+};
 
 /** Replaces the table's rows with a clinic, keeping only what a case supplies. */
 export function seedVisits(

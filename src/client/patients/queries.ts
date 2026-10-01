@@ -54,8 +54,18 @@ export const usePatientSearch = (query: string) =>
 
 export const useAdmittedPatients = () => useQuery(patientQueries.admitted());
 
+/**
+ * One patient's detail read.
+ *
+ * An empty id names no patient, so the read stays off rather than asking for
+ * `/api/patients/` and receiving a 404 — which is how a caller that has nothing
+ * to look up yet avoids a failing request on every render.
+ */
 export const usePatientDetail = (patientId: string) =>
-  useQuery(patientQueries.detail(patientId));
+  useQuery({
+    ...patientQueries.detail(patientId),
+    enabled: patientId !== "",
+  });
 
 /**
  * A patient write can change any page of the list, every search result, the

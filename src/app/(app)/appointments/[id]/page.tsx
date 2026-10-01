@@ -1,7 +1,8 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/utils";
+import { formatClinicDateTime } from "@/lib/clinic-time";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useTransition } from "react";
@@ -11,6 +12,10 @@ import { checkInAppointment } from "@/app/actions/appointment-actions";
 import { useAppointmentDetail } from "@/client/appointments/queries";
 
 const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const { id } = use(params);
   const { isPending, isError, data: appointment } = useAppointmentDetail(id);
@@ -89,18 +94,20 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="my-3">
                     <span className="text-muted-foreground">Provider</span>
-                    {appointment.provider?.role === "DOCTOR" && (
-                      <h4 className="text-xl font-semibold">
-                        {appointment.provider.name}
-                      </h4>
-                    )}
+                    {/* Any provider is the provider of this appointment. Gating
+                        this on the doctor role made a nurse's or a technician's
+                        appointment read as though it had nobody; deciding who may
+                        see which provider is #30's question, not this one's. */}
+                    <h4 className="text-xl font-semibold">
+                      {appointment.provider?.name ?? "Unassigned"}
+                    </h4>
                   </div>
                   <div className="my-3">
                     <p className="text-muted-foreground text-sm leading-6">
                       Start Date
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDateTime(appointment.startDateTime)}
+                      {formatClinicDateTime(appointment.startDateTime, zone)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -108,7 +115,7 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       End Date
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDateTime(appointment.endDateTime)}
+                      {formatClinicDateTime(appointment.endDateTime, zone)}
                     </p>
                   </div>
                   <div className="my-3">

@@ -162,8 +162,11 @@ model Visit {
   createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
   updatedById   String?
   updatedBy     User?             @relation("UpdatedBy", fields: [updatedById], references: [id])
+  // The check-in link lives here and only here: an appointment is opened by the
+  // visit that holds its id. The mirror that used to sit on `Appointment` was
+  // never written, so it could silently disagree with this one.
   appointmentId String?           @unique
-  appointment   Appointment?
+  appointment   Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   visitType     VisitType
   startDateTime DateTime          @default(now())
   endDateTime   DateTime?
@@ -188,8 +191,10 @@ model Appointment {
   patient           Patient           @relation(fields: [patientId], references: [id])
   providerId        String?
   provider          User?             @relation(fields: [providerId], references: [id])
-  appointmentId     String?           @unique
-  visit             Visit?            @relation(fields: [appointmentId], references: [id])
+  // The visit this appointment was checked into, if any. The id lives on the
+  // visit; this is only the other end of that relation, which is what Prisma
+  // needs to read it back.
+  visit             Visit?
   startDateTime     DateTime
   endDateTime       DateTime
   appointmentType   AppointmentType
@@ -212,7 +217,9 @@ model Vitals {
   recordedBy         User?     @relation(fields: [recordedById], references: [id])
   recordedAt         DateTime  @default(now())
   height             Int?
-  weight             Int?
+  // A weight is routinely fractional (70.5 kg); an Int column would round it, so
+  // the stored reading would not be the reading the clinician recorded.
+  weight             Float?
   systolicBP         Int?
   diastolicBP        Int?
   heartRate          Int?

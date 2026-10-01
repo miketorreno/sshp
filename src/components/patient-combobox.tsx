@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePatientSearch } from "@/client/patients/queries";
 import type { PatientSummaryDto } from "@/server/patients/dto";
@@ -32,6 +32,14 @@ export function PatientCombobox({
 }: PatientComboboxProps) {
   const [open, setOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(defaultValue);
+
+  // A patient can be handed in after the first render — a "Schedule" link names
+  // the patient in its URL, and that read arrives later — and `defaultValue` is
+  // only read on mount. Keyed on the id, so it adopts a patient that arrives late
+  // without disturbing one the user picked for themselves afterwards.
+  useEffect(() => {
+    if (defaultValue) setSelectedPatient(defaultValue);
+  }, [defaultValue?.id]);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebouncedValue(searchQuery.trim());
 

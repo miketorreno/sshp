@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { use, useActionState, useEffect, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { formatFetchedDate } from "@/lib/utils";
+import { toDateInputValue } from "@/lib/clinic-time";
 import { updatePatient } from "@/app/actions/patient-actions";
 import { usePatientDetail } from "@/client/patients/queries";
 import type { PatientDetailDto } from "@/server/patients/dto";
@@ -22,6 +23,10 @@ import type { PatientDetailDto } from "@/server/patients/dto";
 type PatientActionState = Awaited<ReturnType<typeof updatePatient>> | null;
 
 const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const { id } = use(params);
   const [formData, setFormData] = useState<PatientDetailDto | null>(null);
@@ -133,7 +138,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   name="dateOfBirth"
                   type="date"
                   required
-                  value={formatFetchedDate(formData.dateOfBirth)}
+                  value={toDateInputValue(formData.dateOfBirth, zone)}
                   onChange={handleChange}
                 />
               </div>
@@ -285,7 +290,7 @@ const EditPatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   id="referredDate"
                   name="referredDate"
                   type="date"
-                  value={formatFetchedDate(formData.referredDate ?? "")}
+                  value={toDateInputValue(formData.referredDate, zone)}
                   onChange={handleChange}
                 />
               </div>

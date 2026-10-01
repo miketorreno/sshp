@@ -19,7 +19,7 @@ import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   SESSION,
   hoursFromStartOfToday,
-  localDay,
+  clinicToday,
   seedVisits,
   visit,
 } from "@/server/visits/test-support/seed";
@@ -60,7 +60,7 @@ describe("visit read routes", () => {
 
   describe("list", () => {
     it("answers the day's window with summary DTOs", async () => {
-      const today = localDay(new Date());
+      const today = clinicToday();
       const response = await visitRoute.GET(
         listRequest(`?from=${today}&to=${today}`),
       );

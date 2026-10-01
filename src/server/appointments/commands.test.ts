@@ -13,6 +13,8 @@ vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
+import { formatClinicDateTime } from "@/lib/clinic-time";
+import { withClinicTimeZone } from "@/lib/test-support/clinic-time";
 import {
   checkInAppointment,
   createAppointment,
@@ -44,7 +46,6 @@ const APPOINTMENT = {
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "user-1",
-  appointmentId: null,
   startDateTime: INPUT.startDateTime,
   endDateTime: INPUT.endDateTime,
   appointmentType: "CLINIC",
@@ -173,6 +174,30 @@ describe("appointment write commands", () => {
   });
 
   describe("create", () => {
+    it("keeps the moment it was given, whichever zone that moment is read in", async () => {
+      await withClinicTimeZone("Asia/Manila", () =>
+        createAppointment({
+          ...INPUT,
+          startDateTime: new Date("2026-03-03T02:00:00.000Z"),
+          endDateTime: new Date("2026-03-03T02:30:00.000Z"),
+        }),
+      );
+
+      const created = table.appointments.find(
+        (row) => row.id !== APPOINTMENT.id && row.id !== ARCHIVED.id,
+      );
+
+      // 10:00 in Manila. Stored as the instant it names, so the detail read
+      // formats it back as 10:00 rather than as whatever the server's zone says.
+      await expect(
+        withClinicTimeZone("Asia/Manila", () =>
+          getAppointmentDetail(String(created?.id)).then((read) =>
+            read && formatClinicDateTime(read.startDateTime, "Asia/Manila"),
+          ),
+        ),
+      ).resolves.toBe("Mar 03, 2026, 10:00");
+    });
+
     it("records an appointment for an active patient and reads it back", async () => {
       const result = await createAppointment({
         ...INPUT,

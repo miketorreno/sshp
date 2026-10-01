@@ -1,5 +1,5 @@
 import { getPrisma } from "@/lib/prisma";
-import { endOfDay, startOfDay } from "@/lib/clinic-day";
+import { clinicTimeZone, endOfDay, startOfDay } from "@/lib/clinic-time";
 import { requireSession } from "@/lib/session";
 import {
   DEFAULT_LIST_LIMIT,
@@ -106,17 +106,25 @@ export async function getVisitDetail(
   return toVisitDetail(visit);
 }
 
-/** The window a read covers, taken from the days the query names. */
+/**
+ * The window a read covers, taken from the clinic days the query names.
+ *
+ * Both bounds resolve through the clinic's clock, so "the second of March" means
+ * the second of March where the clinic is, not where the server happens to run.
+ */
 function startDateTimeWindow(query: VisitListQuery) {
-  const first = startOfDay(query.from);
-  const last = startOfDay(query.to);
+  const zone = clinicTimeZone();
+  const opens = startOfDay(query.from, zone);
+  const closes = endOfDay(query.to, zone);
 
-  if (!first && !last) return {};
+  if (!opens && !closes) return {};
 
   return {
     startDateTime: {
-      ...(first ? { gte: first } : {}),
-      ...(last ? { lt: endOfDay(last) } : {}),
+      ...(opens ? { gte: opens } : {}),
+      // Exclusive: the moment the *next* day opens, not the last instant of this
+      // one. A visit starting exactly at midnight belongs to the new day.
+      ...(closes ? { lt: closes } : {}),
     },
   };
 }

@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, UserCheck2 } from "lucide-react";
@@ -17,10 +18,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-import { calculateAge, formatTime } from "@/lib/utils";
+import { calculateAge, formatClinicTime, toDateInputValue } from "@/lib/clinic-time";
 import Link from "next/link";
 import { useVisitList } from "@/client/visits/queries";
-import { localDay, startOfToday } from "@/lib/clinic-day";
 
 /**
  * Today's Outpatients is the clinic day's list read: it asks the canonical visit
@@ -28,8 +28,12 @@ import { localDay, startOfToday } from "@/lib/clinic-day";
  * that shows here is a visit the rest of the clinic can read.
  */
 const OutpatientsPage = () => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
-  const today = localDay(startOfToday());
+  const today = toDateInputValue(new Date(), zone);
   const {
     data: visits,
     isPending,
@@ -99,12 +103,12 @@ const OutpatientsPage = () => {
                       {outpatient.patient.lastName}
                     </TableCell>
                     <TableCell>
-                      {calculateAge(outpatient.patient.dateOfBirth)}
+                      {calculateAge(outpatient.patient.dateOfBirth, zone)}
                     </TableCell>
                     <TableCell>{outpatient.patient.gender}</TableCell>
                     <TableCell>{outpatient.visitType}</TableCell>
                     <TableCell>
-                      {formatTime(outpatient.startDateTime)}
+                      {formatClinicTime(outpatient.startDateTime, zone)}
                     </TableCell>
                     <TableCell></TableCell>
                     {/* <TableCell>{getLastVisitDate(patient)}</TableCell> */}
@@ -144,29 +148,11 @@ const OutpatientsPage = () => {
                           <DropdownMenuItem
                             onClick={() =>
                               router.push(
-                                `/patients/${outpatient.patient.id}/appointments/new`,
+                                `/appointments/add?patient=${outpatient.patient.id}`,
                               )
                             }
                           >
                             Schedule Appointment
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(
-                                `/patients/${outpatient.patient.id}/history`,
-                              )
-                            }
-                          >
-                            Medical History
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(
-                                `/patients/${outpatient.patient.id}/prescriptions/new`,
-                              )
-                            }
-                          >
-                            Prescribe Medication
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

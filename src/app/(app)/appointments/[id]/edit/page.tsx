@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatFetchedLocalDateTime } from "@/lib/utils";
+import { toDateTimeLocalValue } from "@/lib/clinic-time";
 import { useRouter } from "next/navigation";
 import { use, useActionState } from "react";
 import { Input } from "@/components/ui/input";
@@ -17,24 +18,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateAppointment } from "@/app/actions/appointment-actions";
 import { useAppointmentDetail } from "@/client/appointments/queries";
 
-type AppointmentActionState =
-  | Awaited<ReturnType<typeof updateAppointment>>
-  | null;
+type AppointmentActionState = Awaited<
+  ReturnType<typeof updateAppointment>
+> | null;
 
 const EditAppointmentPage = ({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const { id } = use(params);
   const { isPending, isError, data: appointment } = useAppointmentDetail(id);
   const [result, submit, isSubmitting] = useActionState(
-    async (
-      _previous: AppointmentActionState,
-      formData: FormData
-    ) => updateAppointment(formData),
-    null
+    async (_previous: AppointmentActionState, formData: FormData) =>
+      updateAppointment(formData),
+    null,
   );
 
   if (isPending) {
@@ -83,11 +86,9 @@ const EditAppointmentPage = ({
                 <Label htmlFor="provider">Provider</Label>
                 <Input
                   id="provider"
-                  value={
-                    appointment.provider?.role === "DOCTOR"
-                      ? appointment.provider.name
-                      : "Unassigned"
-                  }
+                  // A provider who exists is the provider, whatever their role;
+                  // "Unassigned" is the truth only when there is nobody assigned.
+                  value={appointment.provider?.name ?? "Unassigned"}
                   disabled
                 />
               </div>
@@ -103,9 +104,7 @@ const EditAppointmentPage = ({
                   name="startDateTime"
                   type="datetime-local"
                   required
-                  defaultValue={formatFetchedLocalDateTime(
-                    appointment.startDateTime
-                  )}
+                  defaultValue={toDateTimeLocalValue(appointment.startDateTime, zone)}
                 />
               </div>
 
@@ -118,9 +117,7 @@ const EditAppointmentPage = ({
                   name="endDateTime"
                   type="datetime-local"
                   required
-                  defaultValue={formatFetchedLocalDateTime(
-                    appointment.endDateTime
-                  )}
+                  defaultValue={toDateTimeLocalValue(appointment.endDateTime, zone)}
                 />
                 {fieldError("endDateTime") && (
                   <p className="text-sm text-red-600">
@@ -135,7 +132,11 @@ const EditAppointmentPage = ({
                 <Label htmlFor="appointmentType">
                   Type<span className="text-red-500">*</span>
                 </Label>
-                <Select name="appointmentType" required defaultValue={appointment.appointmentType}>
+                <Select
+                  name="appointmentType"
+                  required
+                  defaultValue={appointment.appointmentType}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="" />
                   </SelectTrigger>

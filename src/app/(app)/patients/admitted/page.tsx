@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,10 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { calculateAge } from "@/lib/utils";
+import { calculateAge } from "@/lib/clinic-time";
 import { useAdmittedPatients } from "@/client/patients/queries";
 
 const AdmittedPatientsPage = () => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
 
   const { isPending, isError, data: patients } = useAdmittedPatients();
@@ -70,7 +75,7 @@ const AdmittedPatientsPage = () => {
                       {patient.firstName} {patient.middleName}{" "}
                       {patient.lastName}
                     </TableCell>
-                    <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
+                    <TableCell>{calculateAge(patient.dateOfBirth, zone)}</TableCell>
                     <TableCell>{patient.gender}</TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -87,26 +92,12 @@ const AdmittedPatientsPage = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
-                              router.push(`/patients/${patient.id}/appointments/new`)
-                            }
-                          >
-                            Schedule Appointment
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(`/patients/${patient.id}/history`)
-                            }
-                          >
-                            Medical History
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
                               router.push(
-                                `/patients/${patient.id}/prescriptions/new`
+                                `/appointments/add?patient=${patient.id}`,
                               )
                             }
                           >
-                            Prescribe Medication
+                            Schedule Appointment
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

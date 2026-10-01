@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -22,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { calculateAge } from "@/lib/utils";
+import { calculateAge } from "@/lib/clinic-time";
 import {
   invalidatePatientWrites,
   usePatientList,
@@ -33,6 +34,10 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 const PATIENT_PAGE_SIZE = 20;
 
 const AllPatientsPage = () => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -119,7 +124,7 @@ const AllPatientsPage = () => {
                       {patient.lastName}
                     </TableCell>
                     <TableCell>{patient.email}</TableCell>
-                    <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
+                    <TableCell>{calculateAge(patient.dateOfBirth, zone)}</TableCell>
                     <TableCell>{patient.gender}</TableCell>
                     <TableCell>{patient.bloodGroup}</TableCell>
                     <TableCell>{patient.phone || "-"}</TableCell>
@@ -146,14 +151,6 @@ const AllPatientsPage = () => {
                             }
                           >
                             Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onClick={() =>
-                              router.push(`/patients/${patient.id}/history`)
-                            }
-                          >
-                            Medical History
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-red-600 cursor-pointer"
