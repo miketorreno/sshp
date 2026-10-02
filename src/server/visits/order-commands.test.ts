@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { table, getSession } = await vi.hoisted(async () => {
   const { createVisitTable } = await import(
@@ -187,6 +187,7 @@ describe("requesting a medication", () => {
 const ARCHIVABLE = [
   {
     kind: "lab",
+    recordType: "LabOrder",
     archive: archiveLabOrder,
     order: labOrder,
     find: (id: string) => table.findLabOrder(id),
@@ -194,6 +195,7 @@ const ARCHIVABLE = [
   },
   {
     kind: "imaging",
+    recordType: "ImagingOrder",
     archive: archiveImagingOrder,
     order: imagingOrder,
     find: (id: string) => table.findImagingOrder(id),
@@ -201,6 +203,7 @@ const ARCHIVABLE = [
   },
   {
     kind: "medication",
+    recordType: "MedicationOrder",
     archive: archiveMedicationOrder,
     order: medOrder,
     find: (id: string) => table.findMedOrder(id),
@@ -211,6 +214,10 @@ const ARCHIVABLE = [
 describe.each(ARCHIVABLE)("archiving a $kind order", (kind) => {
   beforeEach(() => {
     getSession.mockReset().mockResolvedValue(SESSION);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("refuses a write with no session", async () => {
@@ -269,6 +276,39 @@ describe.each(ARCHIVABLE)("archiving a $kind order", (kind) => {
 
     expect(result).toMatchObject({ ok: true, data: { id: "order-1" } });
     expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
+    expect(table.events).toEqual([]);
+  });
+
+  it("records the archive as an event, with the actor and the instant", async () => {
+    seed(kind.seeded([kind.order({ id: "order-1" })]));
+
+    const result = await kind.archive("visit-1", "order-1");
+
+    expect(table.events).toEqual([
+      expect.objectContaining({
+        action: "ARCHIVE",
+        recordType: kind.recordType,
+        recordId: "order-1",
+        actorId: "user-1",
+        occurredAt: new Date(
+          (result as { data: { archivedAt: string } }).data.archivedAt,
+        ),
+      }),
+    ]);
+  });
+
+  it("cannot archive without the event: a failed event rolls the archive back", async () => {
+    seed(kind.seeded([kind.order({ id: "order-1" })]));
+    vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+      new Error("connection reset"),
+    );
+
+    await expect(kind.archive("visit-1", "order-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FAILURE },
+    });
+    expect(kind.find("order-1")?.deletedAt).toBeNull();
+    expect(table.leakedWrites).toEqual([]);
   });
 
   it("refuses an already archived order once checkout has closed the visit", async () => {
@@ -291,6 +331,7 @@ describe.each(ARCHIVABLE)("archiving a $kind order", (kind) => {
 const RESTORABLE = [
   {
     kind: "lab",
+    recordType: "LabOrder",
     restore: restoreLabOrder,
     order: labOrder,
     find: (id: string) => table.findLabOrder(id),
@@ -298,6 +339,7 @@ const RESTORABLE = [
   },
   {
     kind: "imaging",
+    recordType: "ImagingOrder",
     restore: restoreImagingOrder,
     order: imagingOrder,
     find: (id: string) => table.findImagingOrder(id),
@@ -305,6 +347,7 @@ const RESTORABLE = [
   },
   {
     kind: "medication",
+    recordType: "MedicationOrder",
     restore: restoreMedicationOrder,
     order: medOrder,
     find: (id: string) => table.findMedOrder(id),
@@ -319,6 +362,10 @@ describe.each(RESTORABLE)("restoring a $kind order", (kind) => {
       user: { ...SESSION.user, role: "ADMIN" },
     });
     seed(kind.seeded([kind.order({ id: "order-1", deletedAt: ARCHIVED_AT })]));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("brings the order back, keeping its status", async () => {
@@ -339,6 +386,35 @@ describe.each(RESTORABLE)("restoring a $kind order", (kind) => {
       ok: true,
       data: { id: "order-1", restoredAt: null },
     });
+    expect(table.events).toEqual([]);
+  });
+
+  it("records the restore as an event, with the actor and the instant", async () => {
+    const result = await kind.restore("visit-1", "order-1");
+
+    expect(table.events).toEqual([
+      expect.objectContaining({
+        action: "RESTORE",
+        recordType: kind.recordType,
+        recordId: "order-1",
+        actorId: "user-1",
+        occurredAt: new Date(
+          (result as { data: { restoredAt: string } }).data.restoredAt,
+        ),
+      }),
+    ]);
+  });
+
+  it("cannot restore without the event: a failed event rolls the restore back", async () => {
+    vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+      new Error("connection reset"),
+    );
+
+    await expect(kind.restore("visit-1", "order-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FAILURE },
+    });
+    expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
   });
 
   it("answers not found for an unknown order", async () => {
@@ -369,6 +445,7 @@ describe.each(RESTORABLE)("restoring a $kind order", (kind) => {
       error: { code: FAILURE_CODES.FORBIDDEN },
     });
     expect(kind.find("order-1")?.deletedAt).toEqual(ARCHIVED_AT);
+    expect(table.leakedWrites).toEqual([]);
   });
 });
 

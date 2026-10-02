@@ -213,4 +213,6 @@ export function seedVisits(
   replace("procedures", procedures);
   replace("medications", medicationRows);
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
+  table.leakedWrites.splice(0, table.leakedWrites.length);
 }

@@ -1,4 +1,5 @@
 import type { Appointment, Patient, User, Visit } from "@/generated/prisma";
+import { makeEventTable } from "@/server/archive-events/test-support/event-table";
 
 /**
  * An in-memory stand-in for the appointment and visit tables. Tests seed
@@ -41,6 +42,7 @@ type Store = {
   appointment: Table;
   visit: Table;
   patient: Pick<Table, "findFirst">;
+  archiveRestoreEvent: Table;
 };
 
 export type AppointmentTable = {
@@ -55,6 +57,8 @@ export type AppointmentTable = {
   visits: Row[];
   patients: Row[];
   users: Row[];
+  /** The archive/restore events written, in the order they were appended. */
+  events: Row[];
   /** Ids a caller tried to delete. The appointment module must never fill this. */
   destroyed: string[];
   findAppointment: (id: string) => Row | undefined;
@@ -75,6 +79,7 @@ export function createAppointmentTable(
     ...row,
   }));
   const visits: Row[] = (seed.visits ?? []).map((row) => ({ ...row }));
+  const archiveEvents: Row[] = [];
   const destroyed: string[] = [];
   const relations: Relations = { patients, users, visits };
 
@@ -206,16 +211,20 @@ export function createAppointmentTable(
         return found ? { ...found } : null;
       },
     },
+    archiveRestoreEvent: makeEventTable(archiveEvents),
   };
 
   const snapshot = () =>
-    [appointments, visits].map((rows) => [...rows.map((row) => ({ ...row }))]);
+    [appointments, visits, archiveEvents].map((rows) => [
+      ...rows.map((row) => ({ ...row })),
+    ]);
 
   const restore = (before: Row[][]) => {
-    const [storedAppointments, storedVisits] = before;
+    const [storedAppointments, storedVisits, storedEvents] = before;
 
     appointments.splice(0, appointments.length, ...storedAppointments);
     visits.splice(0, visits.length, ...storedVisits);
+    archiveEvents.splice(0, archiveEvents.length, ...storedEvents);
   };
 
   return {
@@ -236,6 +245,7 @@ export function createAppointmentTable(
     visits,
     patients,
     users,
+    events: archiveEvents,
     destroyed,
     findAppointment: (id) => appointments.find((row) => row.id === id),
     findVisit: (id) => visits.find((row) => row.id === id),

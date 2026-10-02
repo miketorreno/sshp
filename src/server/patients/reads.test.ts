@@ -17,6 +17,7 @@ import { MAX_LIST_LIMIT } from "@/server/patients/contract";
 import {
   getPatientDetail,
   listAdmittedPatients,
+  listPatientHistory,
   listPatients,
 } from "@/server/patients/reads";
 
@@ -78,6 +79,7 @@ const alan = {
 
 const seed = () => {
   table.rows.splice(0, table.rows.length, ada, grace, alan);
+  table.events.splice(0, table.events.length);
 };
 
 describe("patient reads", () => {
@@ -94,7 +96,10 @@ describe("patient reads", () => {
       UnauthenticatedError
     );
     await expect(getPatientDetail("patient-1")).rejects.toBeInstanceOf(
-      UnauthenticatedError
+      UnauthenticatedError,
+    );
+    await expect(listPatientHistory("patient-1")).rejects.toBeInstanceOf(
+      UnauthenticatedError,
     );
   });
 
@@ -239,6 +244,94 @@ describe("patient reads", () => {
     it("reports a missing or archived patient as not found", async () => {
       await expect(getPatientDetail("patient-404")).resolves.toBeNull();
       await expect(getPatientDetail(alan.id)).resolves.toBeNull();
+    });
+  });
+
+  describe("history", () => {
+    it("returns the archive and restore events in the order they happened", async () => {
+      // Seeded newest-first on purpose: the read has to reorder them, not pass
+      // the order the log happens to be stored in through.
+      table.events.push(
+        {
+          id: "archive-event-2",
+          action: "RESTORE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-2",
+          occurredAt: new Date("2026-03-02T00:00:00.000Z"),
+        },
+        {
+          id: "archive-event-1",
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+        {
+          id: "archive-event-3",
+          action: "ARCHIVE",
+          recordType: "Appointment",
+          recordId: "appointment-9",
+          actorId: "user-3",
+          occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      );
+
+      await expect(listPatientHistory("patient-1")).resolves.toEqual([
+        {
+          id: "archive-event-1",
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: "2026-02-01T00:00:00.000Z",
+        },
+        {
+          id: "archive-event-2",
+          action: "RESTORE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-2",
+          occurredAt: "2026-03-02T00:00:00.000Z",
+        },
+      ]);
+    });
+
+    it("answers an empty history for a patient that was never archived", async () => {
+      await expect(listPatientHistory("patient-404")).resolves.toEqual([]);
+    });
+
+    it("keeps two events in the same millisecond in the order they were written", async () => {
+      // `occurredAt` ties here, which is what the id tie-break exists for. Pinned
+      // because an archive and its restore can genuinely land in one millisecond,
+      // and a history that swapped them would read as a restore before the
+      // archive it undid.
+      const sameInstant = new Date("2026-03-02T09:00:00.000Z");
+
+      table.events.push(
+        {
+          id: "archive-event-2",
+          action: "RESTORE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: sameInstant,
+        },
+        {
+          id: "archive-event-1",
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: sameInstant,
+        },
+      );
+
+      await expect(listPatientHistory("patient-1")).resolves.toMatchObject([
+        { id: "archive-event-1", action: "ARCHIVE" },
+        { id: "archive-event-2", action: "RESTORE" },
+      ]);
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
+import { appendArchiveEvent } from "@/server/archive-events/log";
 import { PERMISSIONS, authorize } from "@/server/access";
 import type { VisitType } from "@/generated/prisma";
 import {
@@ -168,9 +169,18 @@ export async function archiveVisit(
     }
 
     const archivedAt = new Date();
-    await getPrisma().visit.update({
-      where: { id: visit.id },
-      data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.visit.update({
+        where: { id: visit.id },
+        data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: "Visit",
+        recordId: visit.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
     });
 
     return actionSuccess({
@@ -221,9 +231,18 @@ export async function restoreVisit(
     }
 
     const restoredAt = new Date();
-    await getPrisma().visit.update({
-      where: { id: visit.id },
-      data: { deletedAt: null, updatedById: actor.data.user.id },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.visit.update({
+        where: { id: visit.id },
+        data: { deletedAt: null, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: "Visit",
+        recordId: visit.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
     });
 
     return actionSuccess({ id: visit.id, restoredAt: restoredAt.toISOString() });

@@ -16,6 +16,7 @@ import { FAILURE_CODES } from "@/lib/action-result";
 import { DEFAULT_LIST_LIMIT } from "@/server/appointments/contract";
 import {
   getAppointmentDetail,
+  listAppointmentHistory,
   listAppointments,
   listAppointmentsInWindow,
 } from "@/server/appointments/reads";
@@ -89,6 +90,7 @@ const seed = ({
   table.patients.splice(0, table.patients.length, PATIENT, ARCHIVED_PATIENT);
   table.users.splice(0, table.users.length, PROVIDER);
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
 };
 
 const detail = (id: string) => getAppointmentDetail(id);
@@ -121,6 +123,15 @@ describe("appointment reads", () => {
       name: "UnauthenticatedError",
       failure: { code: FAILURE_CODES.UNAUTHENTICATED },
     });
+  });
+
+  it("requires a session to read an archive history", async () => {
+    getSession.mockResolvedValue(null);
+
+    await expect(listAppointmentHistory("appointment-1")).rejects.toMatchObject({
+        name: "UnauthenticatedError",
+        failure: { code: FAILURE_CODES.UNAUTHENTICATED },
+      });
   });
 
   describe("list", () => {
@@ -491,6 +502,64 @@ describe("appointment reads", () => {
       table.appointments[0] = appointment({ patientId: "patient-2" });
 
       await expect(detail("appointment-1")).resolves.toBeNull();
+    });
+  });
+
+  describe("history", () => {
+    it("returns the archive and restore events in the order they happened", async () => {
+      // Seeded newest-first on purpose: the read has to reorder them, not pass
+      // the order the log happens to be stored in through.
+      table.events.push(
+        {
+          id: "archive-event-2",
+          action: "RESTORE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-2",
+          occurredAt: new Date("2026-03-02T00:00:00.000Z"),
+        },
+        {
+          id: "archive-event-1",
+          action: "ARCHIVE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-1",
+          occurredAt: new Date("2026-02-01T00:00:00.000Z"),
+        },
+        {
+          id: "archive-event-3",
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-3",
+          occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      );
+
+      await expect(listAppointmentHistory("appointment-1")).resolves.toEqual([
+        {
+          id: "archive-event-1",
+          action: "ARCHIVE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-1",
+          occurredAt: "2026-02-01T00:00:00.000Z",
+        },
+        {
+          id: "archive-event-2",
+          action: "RESTORE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-2",
+          occurredAt: "2026-03-02T00:00:00.000Z",
+        },
+      ]);
+    });
+
+    it("answers an empty history for an appointment that was never archived", async () => {
+      await expect(listAppointmentHistory("appointment-404")).resolves.toEqual(
+        [],
+      );
     });
   });
 });

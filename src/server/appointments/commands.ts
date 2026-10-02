@@ -6,6 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
+import { appendArchiveEvent } from "@/server/archive-events/log";
 import { PERMISSIONS, authorize } from "@/server/access";
 import type { AppointmentType, AppointmentStatus, VisitType } from "@/generated/prisma";
 import {
@@ -71,6 +72,7 @@ export async function createAppointment(
         appointmentType: input.appointmentType,
         appointmentStatus: input.appointmentStatus,
         reason: input.reason,
+        createdById: actor.data.user.id,
       },
     });
 
@@ -100,6 +102,7 @@ export async function updateAppointment(
         appointmentType: input.appointmentType,
         appointmentStatus: input.appointmentStatus,
         reason: input.reason,
+        updatedById: actor.data.user.id,
       },
     });
 
@@ -136,9 +139,18 @@ export async function archiveAppointment(
     }
 
     const archivedAt = new Date();
-    await getPrisma().appointment.update({
-      where: { id: appointment.id },
-      data: { deletedAt: archivedAt },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: "Appointment",
+        recordId: appointment.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
     });
 
     return actionSuccess({
@@ -185,9 +197,18 @@ export async function restoreAppointment(
     }
 
     const restoredAt = new Date();
-    await getPrisma().appointment.update({
-      where: { id: appointment.id },
-      data: { deletedAt: null },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { deletedAt: null, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: "Appointment",
+        recordId: appointment.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
     });
 
     return actionSuccess({
@@ -254,7 +275,12 @@ export async function checkInAppointment(
 
       await tx.appointment.update({
         where: { id: appointment.id },
-        data: { appointmentStatus: "ATTENDED" },
+        // Checking in is an edit of the appointment, so it names its actor the
+        // same way every other write to one does.
+        data: {
+          appointmentStatus: "ATTENDED",
+          updatedById: actor.data.user.id,
+        },
       });
 
       return opened;

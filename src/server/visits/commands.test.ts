@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { table, getSession } = await vi.hoisted(async () => {
   const { createVisitTable } = await import(
@@ -54,6 +54,10 @@ describe("visit commands", () => {
   beforeEach(() => {
     getSession.mockReset().mockResolvedValue(SESSION);
     seed();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("create", () => {
@@ -222,6 +226,34 @@ describe("visit commands", () => {
       expect(table.findVisit("visit-1")?.deletedAt).toEqual(first);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archiveVisit("visit-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Visit",
+          recordId: "visit-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
     it("refuses to archive a visit that is checked out", async () => {
       seed({ visits: [visit({ endDateTime: CHECKED_OUT })] });
 
@@ -288,6 +320,22 @@ describe("visit commands", () => {
       expect(result).toMatchObject({ ok: true });
       expect(table.findVisit("visit-1")?.endDateTime).toEqual(CHECKED_OUT);
       expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreVisit("visit-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Visit",
+          recordId: "visit-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
     });
 
     it("answers not found for an unknown visit", async () => {

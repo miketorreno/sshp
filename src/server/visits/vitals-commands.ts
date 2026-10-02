@@ -6,6 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
+import { appendArchiveEvent } from "@/server/archive-events/log";
 import { PERMISSIONS, authorize } from "@/server/access";
 import { VITALS_NOT_FOUND, VITALS_VISIT_NOT_FOUND } from "./vitals-contract";
 import { VISIT_CHECKED_OUT } from "./contract";
@@ -122,9 +123,18 @@ export async function archiveVitals(
     }
 
     const archivedAt = new Date();
-    await getPrisma().vitals.update({
-      where: { id: vitals.id },
-      data: { deletedAt: archivedAt },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.vitals.update({
+        where: { id: vitals.id },
+        data: { deletedAt: archivedAt },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: "Vitals",
+        recordId: vitals.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
     });
 
     return actionSuccess({
@@ -172,9 +182,18 @@ export async function restoreVitals(
     }
 
     const restoredAt = new Date();
-    await getPrisma().vitals.update({
-      where: { id: vitals.id },
-      data: { deletedAt: null },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.vitals.update({
+        where: { id: vitals.id },
+        data: { deletedAt: null },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: "Vitals",
+        recordId: vitals.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
     });
 
     return actionSuccess({ id: vitals.id, restoredAt: restoredAt.toISOString() });

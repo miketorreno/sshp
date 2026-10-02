@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { table, getSession } = await vi.hoisted(async () => {
   const { createVisitTable } = await import(
@@ -63,6 +63,10 @@ describe("vitals commands", () => {
   beforeEach(() => {
     getSession.mockReset().mockResolvedValue(SESSION);
     seed();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("record", () => {
@@ -183,6 +187,45 @@ describe("vitals commands", () => {
       );
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      seed({ vitals: [vitals()] });
+
+      const result = await archiveVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Vitals",
+          recordId: "vitals-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      seed({ vitals: [vitals({ deletedAt: ARCHIVED_AT })] });
+
+      await archiveVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      seed({ vitals: [vitals()] });
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
+    });
+
     it("refuses an already archived record once checkout has closed the visit", async () => {
       const archivedAt = new Date("2026-02-01T00:00:00.000Z");
       seed({
@@ -223,6 +266,37 @@ describe("vitals commands", () => {
         ok: true,
         data: { id: "vitals-1", restoredAt: null },
       });
+      expect(table.events).toEqual([]);
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Vitals",
+          recordId: "vitals-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
     });
 
     it("answers not found for an unknown reading", async () => {

@@ -6,6 +6,7 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
+import { appendArchiveEvent } from "@/server/archive-events/log";
 import { PERMISSIONS, authorize } from "@/server/access";
 import { PATIENT_EMAIL_TAKEN, PATIENT_NOT_FOUND } from "./contract";
 
@@ -56,7 +57,9 @@ export async function createPatient(
   if (await emailIsTaken(input.email)) return knownFailure(PATIENT_EMAIL_TAKEN);
 
   try {
-    const created = await getPrisma().patient.create({ data: input });
+    const created = await getPrisma().patient.create({
+      data: { ...input, createdById: actor.data.user.id },
+    });
 
     return actionSuccess({ id: created.id });
   } catch (error) {
@@ -83,7 +86,7 @@ export async function updatePatient(
   try {
     const updated = await getPrisma().patient.update({
       where: { id: patient.id },
-      data: input,
+      data: { ...input, updatedById: actor.data.user.id },
     });
 
     return actionSuccess({ id: updated.id });
@@ -118,12 +121,24 @@ export async function archivePatient(
     }
 
     const archivedAt = new Date();
-    await getPrisma().patient.update({
-      where: { id: patient.id },
-      data: { deletedAt: archivedAt },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.patient.update({
+        where: { id: patient.id },
+        data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: "Patient",
+        recordId: patient.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
     });
 
-    return actionSuccess({ id: patient.id, archivedAt: archivedAt.toISOString() });
+    return actionSuccess({
+      id: patient.id,
+      archivedAt: archivedAt.toISOString(),
+    });
   } catch (error) {
     return writeFailure(error);
   }
@@ -167,9 +182,18 @@ export async function restorePatient(
     }
 
     const restoredAt = new Date();
-    await getPrisma().patient.update({
-      where: { id: patient.id },
-      data: { deletedAt: null },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.patient.update({
+        where: { id: patient.id },
+        data: { deletedAt: null, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: "Patient",
+        recordId: patient.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
     });
 
     return actionSuccess({

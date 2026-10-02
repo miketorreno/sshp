@@ -1,6 +1,11 @@
 import { getPrisma } from "@/lib/prisma";
 import { PERMISSIONS, requirePermission } from "@/server/access";
 import {
+  CHRONOLOGICAL,
+  toArchiveEvent,
+  type ArchiveEventDto,
+} from "@/server/archive-events/dto";
+import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
   type PatientListQuery,
@@ -125,4 +130,26 @@ export async function getPatientDetail(
 function clamp(limit: number | undefined): number {
   if (limit === undefined || Number.isNaN(limit)) return DEFAULT_LIST_LIMIT;
   return Math.min(Math.max(Math.trunc(limit), 1), MAX_LIST_LIMIT);
+}
+
+/**
+ * The archive and restore events for one patient, oldest first.
+ *
+ * The log answers the question a nullable `deletedAt` cannot: what happened to
+ * this record over its life. A patient archived and later restored has two
+ * events here rather than one column that is null again, and a patient archived
+ * twice has both archives. An archived patient is history, so this read is not
+ * filtered by `deletedAt` the way the clinical reads are.
+ */
+export async function listPatientHistory(
+  patientId: string,
+): Promise<ArchiveEventDto[]> {
+  await requirePermission(PERMISSIONS.PATIENTS_READ);
+
+  const events = await getPrisma().archiveRestoreEvent.findMany({
+    where: { recordType: "Patient", recordId: patientId },
+    orderBy: CHRONOLOGICAL,
+  });
+
+  return events.map(toArchiveEvent);
 }

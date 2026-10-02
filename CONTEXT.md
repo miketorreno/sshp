@@ -60,6 +60,14 @@ _Avoid_: Undelete, undeleted, resurrected
 Archive and restore as one decision pair, unwound from the top down. A visit under an archived patient, or a reading under an archived visit, stays archived until what holds it up is restored first, so the archive is never half-reversed.
 _Avoid_: Soft delete, cascade restore
 
+**Archive event**:
+One entry in a record's history, written when the record is archived or restored, naming the record, the colleague who acted, and the instant. A record archived and later restored has two events, not one cleared timestamp. Events are appended and never edited or removed, so the history cannot be corrected into a version of events that never happened.
+_Avoid_: Deleted-at history, audit row (an audit row covers every kind of change; an archive event covers only the lifecycle)
+
+**Actor**:
+The colleague who performed a write to a clinical record. Every create, edit, archive, and restore names one, so a record can answer who touched it without anyone searching a log; "nobody" is not an answer, so a row that predates attribution may have no actor while no command may write one.
+_Avoid_: Provider (who a record is with, not who made it), Author, User (an account, not an action's author)
+
 **Search term**:
 What a reader typed to find a patient. It is a filter on the list read rather than a read of its own, so its results are a page of the list and carry the same total the list reports.
 _Avoid_: Query, search endpoint, lookup

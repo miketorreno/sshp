@@ -82,6 +82,7 @@ const seed = (...patients: Record<string, unknown>[]) => {
     ...patients.map((patient) => ({ ...patient }))
   );
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
 };
 
 const findByEmail = (email: string) =>
@@ -189,6 +190,14 @@ describe("patient write commands", () => {
       expect(created?.patientCode).toEqual(expect.any(String));
     });
 
+    it("names the clinician who registered the patient", async () => {
+      await createPatient({ ...INPUT, email: "grace@clinic.test" });
+
+      expect(findByEmail("grace@clinic.test")).toMatchObject({
+        createdById: "user-1",
+      });
+    });
+
     it("reads back through the patient reads", async () => {
       await createPatient({ ...INPUT, email: "grace@clinic.test" });
 
@@ -289,6 +298,14 @@ describe("patient write commands", () => {
         updatePatient("patient-1", { ...INPUT, phone: "555-0100" })
       ).resolves.toEqual({ ok: true, data: { id: "patient-1" } });
     });
+
+    it("names the clinician who edited the patient", async () => {
+      getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+
+      await updatePatient("patient-1", { ...INPUT, phone: "555-0100" });
+
+      expect(table.find("patient-1")).toMatchObject({ updatedById: "user-1" });
+    });
   });
 
   describe("archive", () => {
@@ -337,6 +354,43 @@ describe("patient write commands", () => {
       expect(table.find(archivedAda.id)).toEqual(archivedAda);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archivePatient("patient-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      await archivePatient(archivedAda.id);
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archivePatient("patient-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.find("patient-1")?.deletedAt).toBeNull();
+    });
+
     it("reports an unknown patient as not found", async () => {
       await expect(archivePatient("patient-404")).resolves.toEqual(notFound);
       expect(table.destroyed).toEqual([]);
@@ -363,6 +417,51 @@ describe("patient write commands", () => {
 
       expect(result).toEqual({ ok: true, data: { id: ada.id, restoredAt: null } });
       expect(table.find(ada.id)?.deletedAt).toBeNull();
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restorePatient(archivedAda.id);
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Patient",
+          recordId: archivedAda.id,
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("keeps both events of an archive and its restore", async () => {
+      await archivePatient("patient-1");
+
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      await restorePatient("patient-1");
+
+      expect(table.events.map((event) => event.action)).toEqual([
+        "ARCHIVE",
+        "RESTORE",
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restorePatient(archivedAda.id)).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.find(archivedAda.id)?.deletedAt).toEqual(
+        archivedAda.deletedAt,
+      );
     });
 
     it("reports an unknown patient as not found", async () => {

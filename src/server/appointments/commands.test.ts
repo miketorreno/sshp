@@ -119,6 +119,7 @@ const seed = ({
     deletedAt: null,
   });
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
 };
 
 /** The signed-in clinician, holding a different role. */
@@ -247,6 +248,18 @@ describe("appointment write commands", () => {
       expect(created?.providerId).toBe("user-1");
     });
 
+    it("names the staff member who booked the appointment", async () => {
+      await createAppointment(INPUT);
+
+      const created = table.appointments.find(
+        (row) => row.id !== APPOINTMENT.id && row.id !== ARCHIVED.id,
+      );
+
+      // `providerId` is who the appointment is with; `createdById` is who booked
+      // it, which is a different question and the one the schema could not answer.
+      expect(created?.createdById).toBe("user-1");
+    });
+
     it("refuses a patient who is missing or archived", async () => {
       await expect(
         createAppointment({ ...INPUT, patientId: "patient-404" })
@@ -294,6 +307,14 @@ describe("appointment write commands", () => {
         startDateTime: new Date("2026-03-04T08:00:00.000Z"),
         appointmentStatus: "CANCELLED",
         reason: "Patient rescheduled",
+      });
+    });
+
+    it("names the staff member who edited the appointment", async () => {
+      await updateAppointment("appointment-1", EDIT);
+
+      expect(table.findAppointment("appointment-1")).toMatchObject({
+        updatedById: "user-1",
       });
     });
 
@@ -361,6 +382,43 @@ describe("appointment write commands", () => {
       expect(table.findAppointment(ARCHIVED.id)).toEqual(ARCHIVED);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archiveAppointment("appointment-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      await archiveAppointment(ARCHIVED.id);
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveAppointment("appointment-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.findAppointment("appointment-1")?.deletedAt).toBeNull();
+    });
+
     it("reports an unknown appointment as not found", async () => {
       await expect(archiveAppointment("appointment-404")).resolves.toEqual(
         notFound
@@ -389,6 +447,9 @@ describe("appointment write commands", () => {
       expect(table.findAppointment("appointment-1")?.appointmentStatus).toBe(
         "ATTENDED"
       );
+      // Checking in edits the appointment, so it has to name who did it as well
+      // as marking it attended.
+      expect(table.findAppointment("appointment-1")?.updatedById).toBe("user-1");
 
       await expect(
         getAppointmentDetail("appointment-1")
@@ -507,6 +568,53 @@ describe("appointment write commands", () => {
         ok: true,
         data: { id: "appointment-1", restoredAt: null },
       });
+      expect(table.events).toEqual([]);
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreAppointment(ARCHIVED.id);
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Appointment",
+          recordId: ARCHIVED.id,
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("keeps both events of an archive and its restore", async () => {
+      getSession.mockResolvedValue(SESSION);
+      await archiveAppointment("appointment-1");
+
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      await restoreAppointment("appointment-1");
+
+      expect(table.events.map((event) => event.action)).toEqual([
+        "ARCHIVE",
+        "RESTORE",
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt,
+      );
     });
 
     it("reports an unknown appointment as not found", async () => {

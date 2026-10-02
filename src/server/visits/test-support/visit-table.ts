@@ -13,6 +13,11 @@
  * so the double cannot answer a question the database would not.
  */
 
+import {
+  makeEventTable,
+  type EventTable,
+} from "@/server/archive-events/test-support/event-table";
+
 type Row = Record<string, unknown>;
 type Condition = Record<string, unknown> | null | undefined;
 type Select = Record<string, boolean> | undefined;
@@ -49,6 +54,7 @@ type Store = {
   medicationOrder: Table;
   medication: Table;
   patient: Pick<Table, "findFirst">;
+  archiveRestoreEvent: EventTable;
 };
 
 type Collections = {
@@ -63,6 +69,7 @@ type Collections = {
   clinicalNotes: Row[];
   diagnoses: Row[];
   procedures: Row[];
+  archiveRestoreEvents: Row[];
 };
 
 export type VisitTable = {
@@ -84,8 +91,12 @@ export type VisitTable = {
   patients: Row[];
   users: Row[];
   medications: Row[];
+  /** The archive/restore events written, in the order they were appended. */
+  events: Row[];
   /** Ids a caller tried to delete. The visit surface must never fill this. */
   destroyed: string[];
+  /** Collections a transaction changed without going through it. */
+  leakedWrites: string[];
   findVisit: (id: string) => Row | undefined;
   findVitals: (id: string) => Row | undefined;
   findLabOrder: (id: string) => Row | undefined;
@@ -153,8 +164,11 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
     clinicalNotes: rows(seed.clinicalNotes),
     diagnoses: rows(seed.diagnoses),
     procedures: rows(seed.procedures),
+    archiveRestoreEvents: rows(seed.archiveRestoreEvents),
   };
   const destroyed: string[] = [];
+  /** Collections a transaction changed without going through it. */
+  const leakedWrites: string[] = [];
 
   const table = (name: keyof typeof VISIT_CHILDREN, defaults?: Row) =>
     makeTable(
@@ -184,30 +198,63 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
         return found ? hydrate(found, { include: undefined, select }) : null;
       },
     },
+    archiveRestoreEvent: makeEventTable(collections.archiveRestoreEvents),
   };
 
   return {
     prisma: {
       ...store,
-      $transaction: async (run) => {
+      $transaction: async <T>(run: (tx: Store) => Promise<T>): Promise<T> => {
         const before = snapshot(collections);
+        const vended = new Set<string>();
+        // The transaction vends its own delegates, so a write that reached the
+        // pool instead can be told apart from one the transaction can undo. Both
+        // write to the same in-memory rows, so without this the double would
+        // happily report a rolled-back archive as undone either way.
+        const tx = new Proxy(store, {
+          get: (target, key: string) => {
+            if (key in DELEGATE_COLLECTIONS) vended.add(key);
+
+            return target[key as keyof Store];
+          },
+        });
+
+        const recordLeaks = () => {
+          for (const [delegate, collection] of Object.entries(
+            DELEGATE_COLLECTIONS,
+          )) {
+            if (vended.has(delegate)) continue;
+            if (!changed(collections, before, collection)) continue;
+
+            leakedWrites.push(collection);
+          }
+        };
 
         try {
-          return await run(store);
+          const written = await run(tx);
+
+          recordLeaks();
+
+          return written;
         } catch (error) {
+          // Asked for before the undo, or the undo hides the very write this
+          // is here to notice.
+          recordLeaks();
           restore(collections, before);
           throw error;
         }
       },
     },
     ...collections,
+    events: collections.archiveRestoreEvents,
     destroyed,
-    findVisit: (id) => collections.visits.find((row) => row.id === id),
-    findVitals: (id) => collections.vitals.find((row) => row.id === id),
-    findLabOrder: (id) => collections.labOrders.find((row) => row.id === id),
-    findImagingOrder: (id) =>
+    leakedWrites,
+    findVisit: (id: string) => collections.visits.find((row) => row.id === id),
+    findVitals: (id: string) => collections.vitals.find((row) => row.id === id),
+    findLabOrder: (id: string) => collections.labOrders.find((row) => row.id === id),
+    findImagingOrder: (id: string) =>
       collections.imagingOrders.find((row) => row.id === id),
-    findMedOrder: (id) => collections.medOrders.find((row) => row.id === id),
+    findMedOrder: (id: string) => collections.medOrders.find((row) => row.id === id),
   };
 }
 
@@ -290,6 +337,18 @@ function rows(seed: Row[] | undefined): Row[] {
   return (seed ?? []).map((row) => ({ ...row }));
 }
 
+/** Which in-memory collection each Prisma delegate stands for. */
+const DELEGATE_COLLECTIONS = {
+  visit: "visits",
+  vitals: "vitals",
+  labOrder: "labOrders",
+  imagingOrder: "imagingOrders",
+  medicationOrder: "medOrders",
+  medication: "medications",
+  patient: "patients",
+  archiveRestoreEvent: "archiveRestoreEvents",
+} as const satisfies Record<string, keyof Collections>;
+
 function snapshot(collections: Collections): Row[][] {
   return Object.values(collections).map((stored) =>
     stored.map((row) => ({ ...row })),
@@ -300,8 +359,25 @@ function restore(collections: Collections, before: Row[][]): void {
   const names = Object.keys(collections) as (keyof Collections)[];
 
   names.forEach((name, index) => {
-    collections[name].splice(0, collections[name].length, ...before[index]);
+    const target = collections[name] as Row[];
+    target.splice(0, target.length, ...(before[index] as Row[]));
   });
+}
+
+/** Whether a collection holds anything other than what the snapshot recorded. */
+function changed(
+  collections: Collections,
+  before: Row[][],
+  collection: keyof Collections,
+): boolean {
+  const was = before[Object.keys(collections).indexOf(collection)] ?? [];
+  const now = collections[collection] as Row[];
+
+  if (was.length !== now.length) return true;
+
+  return was.some(
+    (row, index) => JSON.stringify(row) !== JSON.stringify(now[index]),
+  );
 }
 
 /**

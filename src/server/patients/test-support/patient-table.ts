@@ -1,4 +1,8 @@
 import type { Patient } from "@/generated/prisma";
+import {
+  makeEventTable,
+  type EventTable,
+} from "@/server/archive-events/test-support/event-table";
 
 /**
  * An in-memory stand-in for the patient table. Tests seed patients, then observe
@@ -33,9 +37,18 @@ export type PatientTable = {
       update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
       delete: (args: { where: { id: string } }) => Promise<Row>;
     };
+    archiveRestoreEvent: EventTable;
+    $transaction: <T>(
+      run: (tx: {
+        patient: PatientTable["prisma"]["patient"];
+        archiveRestoreEvent: EventTable;
+      }) => Promise<T>,
+    ) => Promise<T>;
   };
   /** The rows the table currently holds, including archived ones. */
   rows: Row[];
+  /** The archive/restore events written, in the order they were appended. */
+  events: Row[];
   /** Ids a caller tried to delete. The patient module must never fill this. */
   destroyed: string[];
   find: (id: string) => Row | undefined;
@@ -45,6 +58,7 @@ export function createPatientTable(
   seed: Partial<Patient>[] = []
 ): PatientTable {
   const rows: Row[] = seed.map((patient) => ({ ...patient }));
+  const events: Row[] = [];
   const destroyed: string[] = [];
 
   const table: PatientTable = {
@@ -116,8 +130,22 @@ export function createPatientTable(
           return { ...removed };
         },
       },
+      archiveRestoreEvent: makeEventTable(events),
+      $transaction: async (run) => {
+        const before = rows.map((row) => ({ ...row }));
+        const beforeEvents = events.map((row) => ({ ...row }));
+
+        try {
+          return await run(table.prisma);
+        } catch (error) {
+          rows.splice(0, rows.length, ...before);
+          events.splice(0, events.length, ...beforeEvents);
+          throw error;
+        }
+      },
     },
     rows,
+    events,
     destroyed,
     find: (id) => rows.find((row) => row.id === id),
   };

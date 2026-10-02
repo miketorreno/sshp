@@ -7,6 +7,10 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
+import {
+  appendArchiveEvent,
+  type ArchivableRecordType,
+} from "@/server/archive-events/log";
 import { PERMISSIONS, authorize } from "@/server/access";
 import { VISIT_CHECKED_OUT } from "./contract";
 import {
@@ -74,7 +78,7 @@ export async function archiveLabOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
-  return archiveOrder(visitId, getPrisma().labOrder, orderId, LAB_ORDER_NOT_FOUND);
+  return archiveOrder(visitId, "labOrder", orderId, LAB_ORDER_NOT_FOUND);
 }
 
 export async function requestImagingOrder(
@@ -90,7 +94,7 @@ export async function archiveImagingOrder(
 ): Promise<ActionResult<OrderArchiveResult>> {
   return archiveOrder(
     visitId,
-    getPrisma().imagingOrder,
+    "imagingOrder",
     orderId,
     IMAGING_ORDER_NOT_FOUND,
   );
@@ -109,7 +113,7 @@ export async function archiveMedicationOrder(
 ): Promise<ActionResult<OrderArchiveResult>> {
   return archiveOrder(
     visitId,
-    getPrisma().medicationOrder,
+    "medicationOrder",
     orderId,
     MEDICATION_ORDER_NOT_FOUND,
   );
@@ -119,7 +123,7 @@ export async function restoreLabOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderRestoreResult>> {
-  return restoreOrder(visitId, getPrisma().labOrder, orderId, LAB_ORDER_NOT_FOUND);
+  return restoreOrder(visitId, "labOrder", orderId, LAB_ORDER_NOT_FOUND);
 }
 
 export async function restoreImagingOrder(
@@ -128,7 +132,7 @@ export async function restoreImagingOrder(
 ): Promise<ActionResult<OrderRestoreResult>> {
   return restoreOrder(
     visitId,
-    getPrisma().imagingOrder,
+    "imagingOrder",
     orderId,
     IMAGING_ORDER_NOT_FOUND,
   );
@@ -140,7 +144,7 @@ export async function restoreMedicationOrder(
 ): Promise<ActionResult<OrderRestoreResult>> {
   return restoreOrder(
     visitId,
-    getPrisma().medicationOrder,
+    "medicationOrder",
     orderId,
     MEDICATION_ORDER_NOT_FOUND,
   );
@@ -180,7 +184,9 @@ async function requestOrder<Fields extends object>(
 }
 
 /** A medication order names a medication the pharmacy's catalogue still holds. */
-async function onTheList(input: MedicationOrderInput): Promise<ActionFailure | null> {
+async function onTheList(
+  input: MedicationOrderInput,
+): Promise<ActionFailure | null> {
   return (await isCatalogueMedication(input.medicationId))
     ? null
     : ORDER_MEDICATION_NOT_FOUND;
@@ -192,7 +198,7 @@ async function onTheList(input: MedicationOrderInput): Promise<ActionFailure | n
  */
 async function archiveOrder(
   visitId: string,
-  orders: OrderTable,
+  kind: OrderKind,
   orderId: string,
   notFound: ActionFailure,
 ): Promise<ActionResult<OrderArchiveResult>> {
@@ -204,7 +210,8 @@ async function archiveOrder(
   if (!visit) return knownFailure(ORDER_VISIT_NOT_FOUND);
 
   try {
-    const order = await orders.findFirst({
+    const prisma = getPrisma();
+    const order = await orderTable(prisma, kind).findFirst({
       where: { id: orderId, visitId },
       select: { id: true, deletedAt: true },
     });
@@ -224,7 +231,21 @@ async function archiveOrder(
     }
 
     const archivedAt = new Date();
-    await orders.update({ where: { id: order.id }, data: { deletedAt: archivedAt } });
+    await prisma.$transaction(async (tx) => {
+      // The update names the transaction client, not the pool: an order archived
+      // outside the transaction could outlive a failure to write its event.
+      await orderTable(tx, kind).update({
+        where: { id: order.id },
+        data: { deletedAt: archivedAt },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: ORDER_KINDS[kind].recordType,
+        recordId: order.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
+    });
 
     return actionSuccess({
       id: order.id,
@@ -248,7 +269,7 @@ async function archiveOrder(
  */
 async function restoreOrder(
   visitId: string,
-  orders: OrderTable,
+  kind: OrderKind,
   orderId: string,
   notFound: ActionFailure,
 ): Promise<ActionResult<OrderRestoreResult>> {
@@ -260,9 +281,10 @@ async function restoreOrder(
   if (!visit) return knownFailure(ORDER_VISIT_NOT_FOUND);
 
   try {
+    const prisma = getPrisma();
     // The visit in the path owns the lookup, and it ignores `deletedAt` on
     // purpose: an archived order is precisely the row this command is here to find.
-    const order = await orders.findFirst({
+    const order = await orderTable(prisma, kind).findFirst({
       where: { id: orderId, visitId },
       select: { id: true, deletedAt: true },
     });
@@ -274,13 +296,62 @@ async function restoreOrder(
     }
 
     const restoredAt = new Date();
-    await orders.update({ where: { id: order.id }, data: { deletedAt: null } });
+    await prisma.$transaction(async (tx) => {
+      await orderTable(tx, kind).update({
+        where: { id: order.id },
+        data: { deletedAt: null },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: ORDER_KINDS[kind].recordType,
+        recordId: order.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
+    });
 
     return actionSuccess({ id: order.id, restoredAt: restoredAt.toISOString() });
   } catch (error) {
     return writeFailure(error);
   }
 }
+
+/** The kinds of order an archive log records. */
+type OrderKind = "labOrder" | "imagingOrder" | "medicationOrder";
+
+/**
+ * One entry per kind, holding both things that differ between them: which model
+ * holds the order, and how the archive log names it. The log names it as the
+ * domain does, because the Prisma delegate name is not the domain's word for it.
+ */
+const ORDER_KINDS: Record<
+  OrderKind,
+  {
+    table: (client: OrderClient) => OrderTable;
+    recordType: ArchivableRecordType;
+  }
+> = {
+  labOrder: {
+    table: (client) => client.labOrder,
+    recordType: "LabOrder",
+  },
+  imagingOrder: {
+    table: (client) => client.imagingOrder,
+    recordType: "ImagingOrder",
+  },
+  medicationOrder: {
+    table: (client) => client.medicationOrder,
+    recordType: "MedicationOrder",
+  },
+};
+
+/** The order model this client addresses, so a lookup and its write share a transaction. */
+function orderTable(client: OrderClient, kind: OrderKind): OrderTable {
+  return ORDER_KINDS[kind].table(client);
+}
+
+/** A client holding every order model, be it the pool or a transaction of it. */
+type OrderClient = Record<OrderKind, OrderTable>;
 
 /** The shape of an order model this command needs, whichever kind it holds. */
 type OrderTable = {
