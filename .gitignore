@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# the template carries no secrets and is the documented list of runtime
+# variables, so it has to reach a fresh clone for `cp .env.example .env` to work
+!.env.example
 
 # vercel
 .vercel

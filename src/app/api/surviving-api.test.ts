@@ -7,10 +7,15 @@ const { handler } = vi.hoisted(() => ({ handler: vi.fn() }));
 // This suite reads the shape of the API, not what it serves, so the routes get
 // an inert database behind them and no request is ever made.
 vi.mock("@/lib/auth", () => ({
-  auth: { handler, api: { getSession: vi.fn() } },
+  getAuth: () => ({ handler, api: { getSession: vi.fn() } }),
 }));
-vi.mock("@/lib/prisma", () => ({ default: {} }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => {} }));
 
+import * as archiveAppointmentsRoute from "@/app/api/archive/appointments/route";
+import * as archiveOrdersRoute from "@/app/api/archive/orders/route";
+import * as archivePatientsRoute from "@/app/api/archive/patients/route";
+import * as archiveVisitsRoute from "@/app/api/archive/visits/route";
+import * as archiveVitalsRoute from "@/app/api/archive/vitals/route";
 import * as appointmentRoute from "@/app/api/appointments/route";
 import * as appointmentDetailRoute from "@/app/api/appointments/[id]/route";
 import * as authRoute from "@/app/api/auth/[...all]/route";
@@ -18,6 +23,7 @@ import * as medicationRoute from "@/app/api/medications/route";
 import * as patientRoute from "@/app/api/patients/route";
 import * as patientAdmittedRoute from "@/app/api/patients/admitted/route";
 import * as patientDetailRoute from "@/app/api/patients/[id]/route";
+import * as patientReportRoute from "@/app/api/patients/reports/route";
 import * as visitRoute from "@/app/api/visits/route";
 import * as visitDetailRoute from "@/app/api/visits/[id]/route";
 
@@ -35,12 +41,21 @@ const BETTER_AUTH_CATCH_ALL = "auth/[...all]/route.ts";
 
 /** Every surviving domain read, as the path the browser calls it by. */
 const DOMAIN_READS: Record<string, Record<string, unknown>> = {
+  // The five archive sections. One route each, because each answers for a different
+  // permission: a doctor archives visits but not nothing, and a section behind the
+  // wrong permission would list records the reader may not bring back.
+  "archive/appointments/route.ts": archiveAppointmentsRoute,
+  "archive/orders/route.ts": archiveOrdersRoute,
+  "archive/patients/route.ts": archivePatientsRoute,
+  "archive/visits/route.ts": archiveVisitsRoute,
+  "archive/vitals/route.ts": archiveVitalsRoute,
   "appointments/route.ts": appointmentRoute,
   "appointments/[id]/route.ts": appointmentDetailRoute,
   "medications/route.ts": medicationRoute,
   "patients/route.ts": patientRoute,
   "patients/[id]/route.ts": patientDetailRoute,
   "patients/admitted/route.ts": patientAdmittedRoute,
+  "patients/reports/route.ts": patientReportRoute,
   "visits/route.ts": visitRoute,
   "visits/[id]/route.ts": visitDetailRoute,
 };

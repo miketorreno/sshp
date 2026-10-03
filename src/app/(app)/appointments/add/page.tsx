@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,17 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { createAppointment } from "@/app/actions/appointment-actions";
 import { PatientCombobox } from "@/components/patient-combobox";
+import { usePatientDetail } from "@/client/patients/queries";
 import type { PatientSummaryDto } from "@/server/patients/dto";
 
 const AddAppointmentPage = () => {
-  const [patientId, setPatientId] = useState("");
+  // Scheduling from a patient's row names them in the URL, so the clinician who
+  // pressed "Schedule" is not asked to pick the patient they just clicked.
+  const searchParams = useSearchParams();
+  const preselectedId = searchParams.get("patient") ?? "";
+  const { data: preselected } = usePatientDetail(preselectedId);
+
+  const [patientId, setPatientId] = useState(preselectedId);
   const [result, submit, isSubmitting] = useActionState(
     async (
       _previous: Awaited<ReturnType<typeof createAppointment>> | null,
@@ -40,7 +48,7 @@ const AddAppointmentPage = () => {
             <div className="grid md:grid-cols-2 gap-8">
               <div className="grid gap-3">
                 <PatientCombobox
-                  defaultValue={null}
+                  defaultValue={preselected ?? null}
                   onSelectChange={(patient: PatientSummaryDto | null) =>
                     setPatientId(patient?.id ?? "")
                   }

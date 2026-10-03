@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,13 +16,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { calculateAge, formatDate } from "@/lib/utils";
+import { calculateAge, formatClinicDate } from "@/lib/clinic-time";
 import { usePatientDetail } from "@/client/patients/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 import Image from "next/image";
 import Link from "next/link";
 import { use, useState } from "react";
 
 const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
+  // Editing a patient is a registration write, so the control is offered only to
+  // the roles the command behind it is for.
+  const { can } = usePermissions();
+
   const [loading] = useState(true);
 
   const { id } = use(params);
@@ -65,11 +76,13 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <h3 className="text-2xl font-semibold tracking-tight mt-8 mb-4">
                   {patient.firstName} {patient.middleName} {patient.lastName}
                 </h3>
-                <Link href={`/patients/${patient.id}/edit`}>
-                  <Button type="button" size={"sm"}>
-                    Edit Patient
-                  </Button>
-                </Link>
+                {can(PERMISSIONS.PATIENTS_WRITE) && (
+                  <Link href={`/patients/${patient.id}/edit`}>
+                    <Button type="button" size={"sm"}>
+                      Edit Patient
+                    </Button>
+                  </Link>
+                )}
               </div>
 
               <div className="col-span-2">
@@ -87,7 +100,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       Age
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {calculateAge(patient.dateOfBirth)}
+                      {calculateAge(patient.dateOfBirth, zone)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -133,7 +146,7 @@ const PatientPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       Registered
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDate(patient.createdAt)}
+                      {formatClinicDate(patient.createdAt, zone)}
                     </p>
                   </div>
                 </div>

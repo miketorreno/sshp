@@ -1,4 +1,6 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,30 +20,65 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-import { formatDateTime } from "@/lib/utils";
-import { useTransition } from "react";
+import { formatClinicDateTime } from "@/lib/clinic-time";
+import { DEFAULT_LIST_LIMIT } from "@/server/appointments/contract";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   checkInAppointment,
-  deleteAppointment,
+  archiveAppointment,
 } from "@/app/actions/appointment-actions";
 import {
   invalidateAppointmentWrites,
   useAppointmentList,
 } from "@/client/appointments/queries";
+import Pagination from "@/components/pagination";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 const AllAppointmentsPage = () => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
+  // Checking a patient in, editing an appointment, and archiving one are three
+  // separate capabilities, and a role may hold one without the others.
+  const { can } = usePermissions();
+
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: appointments, isPending, isError } = useAppointmentList();
+  const [page, setPage] = useState(1);
+
+  // What the box holds, and what is actually searched for, are two values: the
+  // second follows the first after a pause. Typing "Quincy" is five keystrokes and
+  // therefore five reads, of which the first four are a prefix nobody asked for.
+  const [term, setTerm] = useState("");
+  const settled = useDebouncedValue(term.trim());
+  const {
+    data: appointments,
+    isPending,
+    isError,
+  } = useAppointmentList({
+    page,
+    limit: DEFAULT_LIST_LIMIT,
+    search: settled,
+  });
+
+  // A new search is a new list: staying on page 3 of the old results would show a
+  // reader the third page of an answer to a question they are no longer asking.
+  const searchFor = (next: string) => {
+    setTerm(next);
+    setPage(1);
+  };
+
   const [isWriting, startWriting] = useTransition();
 
   const archive = (appointmentId: string) => {
-    if (!confirm("Are you sure you want to delete this appointment?")) return;
+    if (!confirm("Are you sure you want to archive this appointment?")) return;
 
     startWriting(async () => {
-      const result = await deleteAppointment(appointmentId);
+      const result = await archiveAppointment(appointmentId);
 
       if (!result.ok) {
         toast.error(result.error.message);
@@ -70,7 +107,13 @@ const AllAppointmentsPage = () => {
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search appointments..." className="pl-8" />
+            <Input
+              aria-label="Search appointments by patient name or code"
+              placeholder="Search appointments..."
+              className="pl-8"
+              value={term}
+              onChange={(event) => searchFor(event.target.value)}
+            />
           </div>
         </div>
       </div>
@@ -101,7 +144,9 @@ const AllAppointmentsPage = () => {
                 {appointments?.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12">
-                      No appointments found
+                      {settled
+                        ? `No appointments match "${settled}"`
+                        : "No appointments found"}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -113,12 +158,9 @@ const AllAppointmentsPage = () => {
                         {appointment.patient.lastName}
                       </TableCell>
                       <TableCell>{appointment.appointmentType}</TableCell>
+                      <TableCell>{appointment.provider?.name}</TableCell>
                       <TableCell>
-                        {appointment.provider?.role === "DOCTOR" &&
-                          appointment.provider.name}
-                      </TableCell>
-                      <TableCell>
-                        {formatDateTime(appointment.startDateTime)}
+                        {formatClinicDateTime(appointment.startDateTime, zone)}
                       </TableCell>
                       <TableCell>{appointment.appointmentStatus}</TableCell>
                       <TableCell>
@@ -133,14 +175,16 @@ const AllAppointmentsPage = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              disabled={appointment.checkedIn}
-                              onClick={() => checkIn(appointment.id)}
-                            >
-                              {appointment.checkedIn
-                                ? "Already checked in"
-                                : "Check In"}
-                            </DropdownMenuItem>
+                            {can(PERMISSIONS.APPOINTMENTS_CHECK_IN) && (
+                              <DropdownMenuItem
+                                disabled={appointment.checkedIn}
+                                onClick={() => checkIn(appointment.id)}
+                              >
+                                {appointment.checkedIn
+                                  ? "Already checked in"
+                                  : "Check In"}
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(`/appointments/${appointment.id}`)
@@ -148,21 +192,25 @@ const AllAppointmentsPage = () => {
                             >
                               View
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/appointments/${appointment.id}/edit`
-                                )
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => archive(appointment.id)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
+                            {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/appointments/${appointment.id}/edit`,
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {can(PERMISSIONS.APPOINTMENTS_ARCHIVE) && (
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => archive(appointment.id)}
+                              >
+                                Archive
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -171,6 +219,17 @@ const AllAppointmentsPage = () => {
                 )}
               </TableBody>
             </Table>
+          )}
+
+          {/* Paging is hidden while a read is in flight, so the controls never
+              describe rows that have already been replaced. */}
+          {!isPending && !isError && (
+            <Pagination
+              page={page}
+              rowCount={appointments?.length ?? 0}
+              pageSize={DEFAULT_LIST_LIMIT}
+              onPageChange={setPage}
+            />
           )}
         </CardContent>
       </Card>

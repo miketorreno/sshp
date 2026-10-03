@@ -21,8 +21,8 @@ const { table, getSession, revalidatePath, redirect } = await vi.hoisted(
   }
 );
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({
@@ -31,14 +31,20 @@ vi.mock("next/navigation", () => ({
 
 import {
   createPatient,
-  deletePatient,
+  archivePatient,
+  restorePatient,
   updatePatient,
 } from "@/app/actions/patient-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const ACTIVE_PATIENT = {
@@ -64,6 +70,16 @@ const ACTIVE_PATIENT = {
   updatedAt: new Date("2026-01-02T03:04:05.000Z"),
   deletedAt: null as Date | null,
 };
+
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
+
+const ARCHIVED_PATIENT = { ...ACTIVE_PATIENT, deletedAt: ARCHIVED_AT };
 
 const seed = (...patients: Record<string, unknown>[]) => {
   table.rows.splice(0, table.rows.length, ...patients);
@@ -124,7 +140,8 @@ describe("patient form commands", () => {
     await expect(
       updatePatient(patientForm({ id: "patient-1" }))
     ).resolves.toEqual(signedOut);
-    await expect(deletePatient("patient-1")).resolves.toEqual(signedOut);
+    await expect(archivePatient("patient-1")).resolves.toEqual(signedOut);
+    await expect(restorePatient("patient-1")).resolves.toEqual(signedOut);
 
     expect(table.rows).toEqual([ACTIVE_PATIENT]);
     expect(redirect).not.toHaveBeenCalled();
@@ -185,10 +202,13 @@ describe("patient form commands", () => {
         placeOfBirth: null,
         referredDate: new Date("1816-01-02T00:00:00.000Z"),
       });
-      expect(revalidatePath).toHaveBeenCalledWith("/patients/all");
-      expect(redirect).toHaveBeenCalledWith(
-        `/patients/${created?.id}`
-      );
+      // Both server-rendered paths, because every report panel is derived from
+      // the rows this write just changed.
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+      ]);
+      expect(redirect).toHaveBeenCalledWith(`/patients/${created?.id}`);
     });
   });
 
@@ -226,9 +246,9 @@ describe("patient form commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the patient and reports it, so the client can invalidate", async () => {
-      const result = await deletePatient("patient-1");
+      const result = await archivePatient("patient-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "patient-1" } });
 
@@ -236,19 +256,69 @@ describe("patient form commands", () => {
         expect(Number.isNaN(Date.parse(result.data.archivedAt))).toBe(false);
       }
 
-      expect(revalidatePath).toHaveBeenCalledWith("/patients/all");
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+      ]);
       expect(redirect).not.toHaveBeenCalled();
     });
 
     it("never deletes the patient row", async () => {
-      await deletePatient("patient-1");
+      await archivePatient("patient-1");
 
       expect(table.destroyed).toEqual([]);
       expect(table.find("patient-1")?.deletedAt).toBeInstanceOf(Date);
     });
 
     it("reports an unknown patient", async () => {
-      await expect(deletePatient("patient-404")).resolves.toEqual({
+      await expect(archivePatient("patient-404")).resolves.toEqual({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
+      });
+    });
+  });
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(ADMIN);
+      // A fresh row each time: `seed` stores the object it is given, and a command
+      // restores the row it finds in place, so a shared fixture would come back
+      // already restored for the next case.
+      seed({ ...ARCHIVED_PATIENT });
+    });
+
+    it("restores the patient and revalidates the lists the row returns to", async () => {
+      const result = await restorePatient("patient-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "patient-1" } });
+      expect(table.find("patient-1")?.deletedAt).toBeNull();
+
+      // The lists and the report are the server-rendered paths the row comes back to.
+      // The archive itself is a client query rather than a rendered page, so the
+      // caller invalidates that instead.
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+        "/patients/patient-1",
+      ]);
+      expect(redirect).not.toHaveBeenCalled();
+    });
+
+    it("refuses a clinician, who may archive a patient but not bring one back", async () => {
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restorePatient("patient-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+      expect(table.find("patient-1")?.deletedAt).toEqual(ARCHIVED_AT);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("reports an unknown patient rather than restoring nothing quietly", async () => {
+      await expect(restorePatient("patient-404")).resolves.toEqual({
         ok: false,
         error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
       });

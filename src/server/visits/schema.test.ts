@@ -56,7 +56,7 @@ describe("visit schemas", () => {
 
     expect(parsed.success && parsed.data).toEqual({
       patientId: "patient-1",
-      startDateTime: new Date("2026-03-02T09:00"),
+      startDateTime: new Date("2026-03-02T09:00:00.000Z"),
       visitType: "CLINIC",
       reason: null,
     });
@@ -101,7 +101,7 @@ describe("visit schemas", () => {
       );
 
       expect(parsed.success && parsed.data).toMatchObject({
-        recordedAt: new Date("2026-03-02T09:40"),
+        recordedAt: new Date("2026-03-02T09:40:00.000Z"),
         height: 165,
         weight: null,
         glucose: null,
@@ -130,6 +130,37 @@ describe("visit schemas", () => {
       expect(parsed.success).toBe(false);
       expect(parsed.error?.issues).toMatchObject([
         { path: ["height"], message: "Enter a number" },
+      ]);
+    });
+
+    it("stores the moment the clinician typed in the clinic's own zone", () => {
+      // 09:40 in Manila is 01:40 UTC. Read as a server-local wall clock in any
+      // other zone, this is the reading that shifts.
+      process.env.CLINIC_TIME_ZONE = "Asia/Manila";
+
+      try {
+        const parsed = recordVitalsSchema.safeParse(
+          recordVitalsInputFromFormData(vitalsForm()),
+        );
+
+        expect(parsed.success && parsed.data).toMatchObject({
+          recordedAt: new Date("2026-03-02T01:40:00.000Z"),
+        });
+      } finally {
+        delete process.env.CLINIC_TIME_ZONE;
+      }
+    });
+
+    it("rejects a wall clock that is not a moment the clinic can act on", () => {
+      const parsed = recordVitalsSchema.safeParse(
+        recordVitalsInputFromFormData(
+          vitalsForm({ recordedAt: "2026-02-31T09:40" }),
+        ),
+      );
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues).toMatchObject([
+        { path: ["recordedAt"], message: "Enter a date and time" },
       ]);
     });
 

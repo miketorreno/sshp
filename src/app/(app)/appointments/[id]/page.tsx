@@ -1,7 +1,8 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/utils";
+import { formatClinicDateTime } from "@/lib/clinic-time";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useTransition } from "react";
@@ -9,8 +10,18 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { checkInAppointment } from "@/app/actions/appointment-actions";
 import { useAppointmentDetail } from "@/client/appointments/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
+  // Editing the appointment and checking the patient in from it are two
+  // capabilities, and a role may hold one without the other.
+  const { can } = usePermissions();
+
   const router = useRouter();
   const { id } = use(params);
   const { isPending, isError, data: appointment } = useAppointmentDetail(id);
@@ -89,18 +100,20 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="my-3">
                     <span className="text-muted-foreground">Provider</span>
-                    {appointment.provider?.role === "DOCTOR" && (
-                      <h4 className="text-xl font-semibold">
-                        {appointment.provider.name}
-                      </h4>
-                    )}
+                    {/* Any provider is the provider of this appointment. Gating
+                        this on the doctor role made a nurse's or a technician's
+                        appointment read as though it had nobody; deciding who may
+                        see which provider is #30's question, not this one's. */}
+                    <h4 className="text-xl font-semibold">
+                      {appointment.provider?.name ?? "Unassigned"}
+                    </h4>
                   </div>
                   <div className="my-3">
                     <p className="text-muted-foreground text-sm leading-6">
                       Start Date
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDateTime(appointment.startDateTime)}
+                      {formatClinicDateTime(appointment.startDateTime, zone)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -108,7 +121,7 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       End Date
                     </p>
                     <p className="font-semibold text-sm leading-6">
-                      {formatDateTime(appointment.endDateTime)}
+                      {formatClinicDateTime(appointment.endDateTime, zone)}
                     </p>
                   </div>
                   <div className="my-3">
@@ -144,25 +157,28 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
             <Button type="button" onClick={() => router.back()} size={"sm"}>
               Back
             </Button>
-            <Link href={`/appointments/${appointment.id}/edit`}>
-              <Button type="button" size={"sm"}>
-                Edit Appointment
-              </Button>
-            </Link>
-            {appointment.checkedIn ? (
-              <Button type="button" size={"sm"} disabled>
-                Already checked in
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size={"sm"}
-                onClick={checkIn}
-                disabled={isCheckingIn}
-              >
-                {isCheckingIn ? "Checking in..." : "Check In"}
-              </Button>
+            {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+              <Link href={`/appointments/${appointment.id}/edit`}>
+                <Button type="button" size={"sm"}>
+                  Edit Appointment
+                </Button>
+              </Link>
             )}
+            {can(PERMISSIONS.APPOINTMENTS_CHECK_IN) &&
+              (appointment.checkedIn ? (
+                <Button type="button" size={"sm"} disabled>
+                  Already checked in
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size={"sm"}
+                  onClick={checkIn}
+                  disabled={isCheckingIn}
+                >
+                  {isCheckingIn ? "Checking in..." : "Check In"}
+                </Button>
+              ))}
           </div>
         </CardContent>
       </Card>

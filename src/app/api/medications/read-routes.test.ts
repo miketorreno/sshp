@@ -8,8 +8,8 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createMedicationTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import * as medicationRoute from "@/app/api/medications/route";
@@ -68,5 +68,22 @@ describe("medication read routes", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
+  });
+
+  it("answers with forbidden for an account that may not read the catalogue", async () => {
+    getSession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "RECEPTIONIST" },
+    });
+
+    const response = await read();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: FAILURE_CODES.FORBIDDEN,
+        message: FAILURE_MESSAGES.FORBIDDEN,
+      },
+    });
   });
 });

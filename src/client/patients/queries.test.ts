@@ -10,8 +10,12 @@ describe("patient write invalidation", () => {
     const seeded: [readonly unknown[], string][] = [
       [queryKeys.patients.list({ page: 1, limit: 10 }), "first page"],
       [queryKeys.patients.list({ page: 2, limit: 10 }), "second page"],
-      [queryKeys.patients.search("ada"), "search"],
+      // A search is a page of the list with a term in it, so it is invalidated by
+      // the same prefix as every other page — there is no separate search read to
+      // forget.
+      [queryKeys.patients.list({ page: 1, search: "ada" }), "search page"],
       [queryKeys.patients.admitted(), "admitted"],
+      [queryKeys.patients.report("month"), "report"],
       [queryKeys.patients.detail("patient-1"), "written patient"],
       [queryKeys.patients.detail("patient-2"), "other patient"],
     ];
@@ -29,8 +33,9 @@ describe("patient write invalidation", () => {
     expect(invalidated).toEqual([
       "first page",
       "second page",
-      "search",
+      "search page",
       "admitted",
+      "report",
       "written patient",
     ]);
   });

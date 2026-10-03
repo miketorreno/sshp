@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { table, getSession } = await vi.hoisted(async () => {
   const { createVisitTable } = await import(
@@ -8,12 +8,13 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createVisitTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
 import {
+  ARCHIVED_PATIENT,
   CHECKED_OUT,
   PATIENT,
   SESSION,
@@ -24,7 +25,8 @@ import {
 import {
   checkoutVisit,
   createVisit,
-  deleteVisit,
+  archiveVisit,
+  restoreVisit,
   updateVisit,
   type VisitInput,
 } from "@/server/visits/commands";
@@ -42,10 +44,20 @@ const input = (overrides: Partial<VisitInput> = {}): VisitInput => ({
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
 
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
+
 describe("visit commands", () => {
   beforeEach(() => {
     getSession.mockReset().mockResolvedValue(SESSION);
     seed();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("create", () => {
@@ -197,7 +209,7 @@ describe("visit commands", () => {
 
   describe("archive", () => {
     it("archives the visit rather than destroying it", async () => {
-      const result = await deleteVisit("visit-1");
+      const result = await archiveVisit("visit-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")?.deletedAt).toBeInstanceOf(Date);
@@ -205,19 +217,47 @@ describe("visit commands", () => {
     });
 
     it("is idempotent, so a retried archive reports the same result", async () => {
-      await deleteVisit("visit-1");
+      await archiveVisit("visit-1");
       const first = table.findVisit("visit-1")?.deletedAt;
 
-      const retried = await deleteVisit("visit-1");
+      const retried = await archiveVisit("visit-1");
 
       expect(retried).toMatchObject({ ok: true });
       expect(table.findVisit("visit-1")?.deletedAt).toEqual(first);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archiveVisit("visit-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Visit",
+          recordId: "visit-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
     it("refuses to archive a visit that is checked out", async () => {
       seed({ visits: [visit({ endDateTime: CHECKED_OUT })] });
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -230,7 +270,7 @@ describe("visit commands", () => {
         visits: [visit({ endDateTime: CHECKED_OUT, deletedAt: archived })],
       });
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -240,10 +280,118 @@ describe("visit commands", () => {
     it("refuses an archive with no session", async () => {
       getSession.mockResolvedValue(null);
 
-      await expect(deleteVisit("visit-1")).resolves.toMatchObject({
+      await expect(archiveVisit("visit-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.UNAUTHENTICATED },
       });
     });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      seed({ visits: [visit({ deletedAt: ARCHIVED })] });
+    });
+
+    it("brings the visit back to the day's list", async () => {
+      const result = await restoreVisit("visit-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
+      expect(result.ok && result.data.restoredAt).toEqual(expect.any(String));
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
+    it("is idempotent for a visit that is already active", async () => {
+      seed();
+
+      await expect(restoreVisit("visit-1")).resolves.toEqual({
+        ok: true,
+        data: { id: "visit-1", restoredAt: null },
+      });
+    });
+
+    it("keeps a checkout a restored visit already had", async () => {
+      seed({
+        visits: [visit({ endDateTime: CHECKED_OUT, deletedAt: ARCHIVED })],
+      });
+
+      const result = await restoreVisit("visit-1");
+
+      expect(result).toMatchObject({ ok: true });
+      expect(table.findVisit("visit-1")?.endDateTime).toEqual(CHECKED_OUT);
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreVisit("visit-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Visit",
+          recordId: "visit-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("answers not found for an unknown visit", async () => {
+      await expect(restoreVisit("visit-404")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+    });
+
+    it("refuses to restore a visit under an archived patient", async () => {
+      seed({
+        patients: [ARCHIVED_PATIENT],
+        visits: [visit({ deletedAt: ARCHIVED })],
+      });
+
+      await expect(restoreVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toEqual(ARCHIVED);
+    });
+
+    it("refuses a restore to a clinician who may archive but not restore", async () => {
+      getSession.mockResolvedValue(sessionFor("DOCTOR"));
+
+      await expect(restoreVisit("visit-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toEqual(ARCHIVED);
+    });
+  });
+});
+
+describe("roles", () => {
+  beforeEach(() => {
+    seed();
+  });
+
+  it("refuses a visit write to a role that only reads visits", async () => {
+    getSession.mockResolvedValue(sessionFor("PHARMACIST"));
+
+    await expect(createVisit(input())).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.visits).toHaveLength(1);
+  });
+
+  it("refuses archiving a visit to the front desk", async () => {
+    getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+
+    await expect(archiveVisit("visit-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
   });
 });

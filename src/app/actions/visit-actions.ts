@@ -10,9 +10,11 @@ import { OUTPATIENTS_PAGE, visitPage } from "@/server/visits/contract";
 import {
   checkoutVisit as checkoutVisitCommand,
   createVisit as createVisitCommand,
-  deleteVisit as deleteVisitCommand,
+  archiveVisit as archiveVisitCommand,
+  restoreVisit as restoreVisitCommand,
   updateVisit as updateVisitCommand,
   type VisitArchiveResult,
+  type VisitRestoreResult,
   type VisitWriteResult,
 } from "@/server/visits/commands";
 import {
@@ -107,10 +109,29 @@ export async function checkoutVisit(
  * Archiving is a button rather than a form submission: it reports the archive so
  * the caller can invalidate the reads it changed.
  */
-export async function deleteVisit(
+export async function archiveVisit(
   visitId: string,
 ): Promise<ActionResult<VisitArchiveResult>> {
-  const result = await deleteVisitCommand(visitId);
+  const result = await archiveVisitCommand(visitId);
+
+  if (!result.ok) return result;
+
+  revalidateVisitPages(visitId);
+
+  return result;
+}
+
+/**
+ * Reported rather than redirected, because the caller is the archive and stays in it.
+ *
+ * Only an administrator reaches this; a visit whose patient is still archived is
+ * refused by the command, and the archive screen already names the patient to restore
+ * first.
+ */
+export async function restoreVisit(
+  visitId: string,
+): Promise<ActionResult<VisitRestoreResult>> {
+  const result = await restoreVisitCommand(visitId);
 
   if (!result.ok) return result;
 

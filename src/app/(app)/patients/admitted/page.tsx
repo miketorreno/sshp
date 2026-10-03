@@ -1,4 +1,5 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,10 +18,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { calculateAge } from "@/lib/utils";
+import { calculateAge } from "@/lib/clinic-time";
 import { useAdmittedPatients } from "@/client/patients/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 const AdmittedPatientsPage = () => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
+  // Booking an appointment is the appointment desk's write, and this list is
+  // offered to a role that can read patients.
+  const { can } = usePermissions();
+
   const router = useRouter();
 
   const { isPending, isError, data: patients } = useAdmittedPatients();
@@ -70,7 +81,7 @@ const AdmittedPatientsPage = () => {
                       {patient.firstName} {patient.middleName}{" "}
                       {patient.lastName}
                     </TableCell>
-                    <TableCell>{calculateAge(patient.dateOfBirth)}</TableCell>
+                    <TableCell>{calculateAge(patient.dateOfBirth, zone)}</TableCell>
                     <TableCell>{patient.gender}</TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -85,29 +96,17 @@ const AdmittedPatientsPage = () => {
                           >
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(`/patients/${patient.id}/appointments/new`)
-                            }
-                          >
-                            Schedule Appointment
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(`/patients/${patient.id}/history`)
-                            }
-                          >
-                            Medical History
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(
-                                `/patients/${patient.id}/prescriptions/new`
-                              )
-                            }
-                          >
-                            Prescribe Medication
-                          </DropdownMenuItem>
+                          {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(
+                                  `/appointments/add?patient=${patient.id}`,
+                                )
+                              }
+                            >
+                              Schedule Appointment
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

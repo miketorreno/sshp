@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { table, getSession } = await vi.hoisted(async () => {
   const { createVisitTable } = await import(
@@ -8,8 +8,8 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createVisitTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
@@ -23,9 +23,18 @@ import {
 } from "@/server/visits/test-support/seed";
 import {
   recordVitals,
-  deleteVitals,
+  archiveVitals,
+  restoreVitals,
   type VitalsInput,
 } from "@/server/visits/vitals-commands";
+
+const ARCHIVED_AT = new Date("2026-02-01T00:00:00.000Z");
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const input = (overrides: Partial<VitalsInput> = {}): VitalsInput => ({
   visitId: "visit-1",
@@ -54,6 +63,10 @@ describe("vitals commands", () => {
   beforeEach(() => {
     getSession.mockReset().mockResolvedValue(SESSION);
     seed();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("record", () => {
@@ -124,7 +137,7 @@ describe("vitals commands", () => {
     it("refuses a write with no session", async () => {
       getSession.mockResolvedValue(null);
 
-      await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.UNAUTHENTICATED },
       });
@@ -133,7 +146,7 @@ describe("vitals commands", () => {
     it("answers not found if the visit or vitals do not belong together", async () => {
       seed({ vitals: [vitals({ id: "vitals-2", visitId: "visit-other" })] });
 
-      await expect(deleteVitals("visit-1", "vitals-2")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-2")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.NOT_FOUND },
       });
@@ -145,7 +158,7 @@ describe("vitals commands", () => {
         vitals: [vitals()],
       });
 
-      await expect(deleteVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
         ok: false,
         error: { code: FAILURE_CODES.CONFLICT },
       });
@@ -154,7 +167,7 @@ describe("vitals commands", () => {
     it("archives the vitals rather than destroying them", async () => {
       seed({ vitals: [vitals()] });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
       const v = table.vitals.find((r) => r.id === "vitals-1");
@@ -166,12 +179,51 @@ describe("vitals commands", () => {
       const archivedAt = new Date("2026-02-01T00:00:00.000Z");
       seed({ vitals: [vitals({ deletedAt: archivedAt })] });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
       expect(table.vitals.find((r) => r.id === "vitals-1")?.deletedAt).toEqual(
         archivedAt,
       );
+    });
+
+    it("records the archive as an event, with the actor and the instant", async () => {
+      seed({ vitals: [vitals()] });
+
+      const result = await archiveVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Vitals",
+          recordId: "vitals-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      seed({ vitals: [vitals({ deletedAt: ARCHIVED_AT })] });
+
+      await archiveVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      seed({ vitals: [vitals()] });
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
     });
 
     it("refuses an already archived record once checkout has closed the visit", async () => {
@@ -181,7 +233,7 @@ describe("vitals commands", () => {
         vitals: [vitals({ deletedAt: archivedAt })],
       });
 
-      const result = await deleteVitals("visit-1", "vitals-1");
+      const result = await archiveVitals("visit-1", "vitals-1");
 
       expect(result).toMatchObject({
         ok: false,
@@ -191,5 +243,134 @@ describe("vitals commands", () => {
         archivedAt,
       );
     });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      seed({ vitals: [vitals({ deletedAt: ARCHIVED_AT })] });
+    });
+
+    it("brings the reading back to its visit", async () => {
+      const result = await restoreVitals("visit-1", "vitals-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
+      expect(result.ok && result.data.restoredAt).toEqual(expect.any(String));
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
+    });
+
+    it("is idempotent for a reading that is already active", async () => {
+      seed({ vitals: [vitals()] });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toEqual({
+        ok: true,
+        data: { id: "vitals-1", restoredAt: null },
+      });
+      expect(table.events).toEqual([]);
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreVitals("visit-1", "vitals-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Vitals",
+          recordId: "vitals-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FAILURE },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
+    });
+
+    it("answers not found for an unknown reading", async () => {
+      await expect(restoreVitals("visit-1", "vitals-404")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+    });
+
+    it("restores a reading into a visit that has been checked out", async () => {
+      // The visit is history, so it will not take another recording; but the
+      // archive was never a consequence of the checkout, and bringing the reading
+      // back does not reopen anything.
+      seed({
+        visits: [visit({ endDateTime: CHECKED_OUT })],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: true,
+        data: { id: "vitals-1" },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
+    });
+
+    it("refuses to restore a reading whose visit is out of the way itself", async () => {
+      seed({
+        visits: [visit({ deletedAt: ARCHIVED_AT })],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND },
+      });
+      expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
+    });
+
+    it("refuses a restore to a nurse, who may archive but not restore", async () => {
+      getSession.mockResolvedValue(sessionFor("NURSE"));
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+    });
+  });
+});
+
+describe("roles", () => {
+  beforeEach(() => {
+    seed();
+  });
+
+  it("refuses recording vitals to a role that only reads the visit", async () => {
+    getSession.mockResolvedValue(sessionFor("PHARMACIST"));
+
+    await expect(recordVitals(input())).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.vitals).toHaveLength(0);
+  });
+
+  it("refuses archiving vitals to the front desk", async () => {
+    getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+    seed({ vitals: [vitals()] });
+
+    await expect(archiveVitals("visit-1", "vitals-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: FAILURE_CODES.FORBIDDEN },
+    });
+    expect(table.vitals.find((row) => row.id === "vitals-1")?.deletedAt).toBeNull();
   });
 });

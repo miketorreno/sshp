@@ -1,5 +1,12 @@
 import type { AppointmentListQuery } from "@/server/appointments/contract";
-import type { PatientListQuery } from "@/server/patients/contract";
+import type {
+  ArchiveListQuery,
+  ArchiveSectionKey,
+} from "@/server/archive/contract";
+import type {
+  PatientListQuery,
+  PatientReportPeriod,
+} from "@/server/patients/contract";
 import type { VisitListQuery } from "@/server/visits/contract";
 
 /**
@@ -10,13 +17,20 @@ import type { VisitListQuery } from "@/server/visits/contract";
 
 export const queryKeys = {
   patients: {
+    /**
+     * One key per page *and* per search term. Search is a filter on the list read
+     * rather than a read of its own, so its key is the list key with the term in
+     * it: a search result is a page of the list, and the two can never disagree
+     * about which patient a page holds.
+     */
     list: (query: PatientListQuery = {}) =>
       ["patients", "list", query] as const,
     lists: () => ["patients", "list"] as const,
     detail: (patientId: string) => ["patients", "detail", patientId] as const,
     admitted: () => ["patients", "admitted"] as const,
-    search: (query: string) => ["patients", "search", query] as const,
-    searches: () => ["patients", "search"] as const,
+    report: (period: PatientReportPeriod) =>
+      ["patients", "report", period] as const,
+    reports: () => ["patients", "report"] as const,
   },
   appointments: {
     list: (query: AppointmentListQuery = {}) =>
@@ -32,5 +46,16 @@ export const queryKeys = {
   },
   medications: {
     list: () => ["medications", "list"] as const,
+  },
+  /**
+   * The archive is one screen of five sections rather than five screens, but each
+   * section is its own read: a role may see patients without seeing orders, and each
+   * list is paged on its own. So the key names the section and its page, and the
+   * shared prefix covers the lot.
+   */
+  archive: {
+    section: (section: ArchiveSectionKey, query: ArchiveListQuery = {}) =>
+      ["archive", section, query] as const,
+    sections: () => ["archive"] as const,
   },
 } as const;

@@ -12,12 +12,16 @@ const { table, getSession, revalidatePath } = await vi.hoisted(async () => {
   };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
-import { addVitals, deleteVitals } from "@/app/actions/vitals-actions";
+import {
+  addVitals,
+  archiveVitals,
+  restoreVitals,
+} from "@/app/actions/vitals-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   SESSION,
@@ -28,6 +32,14 @@ import {
 
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
+
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
 
 function vitalsForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
@@ -72,7 +84,7 @@ describe("vitals form commands", () => {
     getSession.mockResolvedValue(null);
 
     await expect(addVitals(vitalsForm())).resolves.toEqual(signedOut);
-    await expect(deleteVitals("visit-1", "vitals-1")).resolves.toEqual(
+    await expect(archiveVitals("visit-1", "vitals-1")).resolves.toEqual(
       signedOut,
     );
 
@@ -132,7 +144,7 @@ describe("vitals form commands", () => {
       vitals: [vitals(), other],
     });
 
-    await expect(deleteVitals("visit-1", "vitals-2")).resolves.toMatchObject({
+    await expect(archiveVitals("visit-1", "vitals-2")).resolves.toMatchObject({
       ok: false,
       error: { code: FAILURE_CODES.NOT_FOUND },
     });
@@ -140,11 +152,66 @@ describe("vitals form commands", () => {
   });
 
   it("archives the vitals and reports it, so the visit read can be invalidated", async () => {
-    const result = await deleteVitals("visit-1", "vitals-1");
+    const result = await archiveVitals("visit-1", "vitals-1");
 
     expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
     expect(table.findVitals("vitals-1")?.deletedAt).toBeInstanceOf(Date);
     expect(table.destroyed).toEqual([]);
     expect(revalidatePath).toHaveBeenCalledWith(`/visits/visit-1`);
+  });
+  describe("restore", () => {
+    it("restores the reading into the visit it was taken during", async () => {
+      getSession.mockResolvedValue(ADMIN);
+      // A fresh row each time: a command restores the row it finds in place, so a
+      // shared fixture would come back already restored for the next case.
+      seed({
+        visits: [visit()],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      const result = await restoreVitals("visit-1", "vitals-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "vitals-1" } });
+      expect(table.findVitals("vitals-1")?.deletedAt).toBeNull();
+      expect(revalidatePath.mock.calls.flat()).toEqual(["/visits/visit-1"]);
+    });
+
+    it("refuses a clinician, who may archive a reading but not bring one back", async () => {
+      getSession.mockResolvedValue(ADMIN);
+      seed({
+        visits: [visit()],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+      expect(table.findVitals("vitals-1")?.deletedAt).toEqual(ARCHIVED_AT);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("reports a reading whose visit is still archived", async () => {
+      // The visit comes back before the reading does, so this refusal is what the
+      // archive screen leads with: restore the visit first.
+      getSession.mockResolvedValue(ADMIN);
+      seed({
+        visits: [visit({ deletedAt: ARCHIVED_AT })],
+        vitals: [vitals({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreVitals("visit-1", "vitals-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.NOT_FOUND,
+          message: "Vitals are recorded against a visit that is still active.",
+        },
+      });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
   });
 });

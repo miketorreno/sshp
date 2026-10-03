@@ -10,6 +10,7 @@ import type { ZodError, ZodType } from "zod";
 
 export const FAILURE_CODES = {
   UNAUTHENTICATED: "UNAUTHENTICATED",
+  FORBIDDEN: "FORBIDDEN",
   INVALID_INPUT: "INVALID_INPUT",
   NOT_FOUND: "NOT_FOUND",
   CONFLICT: "CONFLICT",
@@ -20,6 +21,10 @@ export type FailureCode = (typeof FAILURE_CODES)[keyof typeof FAILURE_CODES];
 
 export const FAILURE_MESSAGES: Record<FailureCode, string> = {
   UNAUTHENTICATED: "You need to sign in to continue.",
+  // A signed-in clinician whose role does not hold the permission. It says so in
+  // its own words, because sending it to the sign-in page would tell a clinician
+  // who is already signed in that they are not.
+  FORBIDDEN: "Your role does not allow that.",
   INVALID_INPUT: "Please check the details you entered and try again.",
   NOT_FOUND: "The requested record could not be found.",
   CONFLICT: "That change conflicts with an existing record.",
@@ -28,6 +33,7 @@ export const FAILURE_MESSAGES: Record<FailureCode, string> = {
 
 const FAILURE_STATUSES: Record<FailureCode, number> = {
   UNAUTHENTICATED: 401,
+  FORBIDDEN: 403,
   INVALID_INPUT: 400,
   NOT_FOUND: 404,
   CONFLICT: 409,

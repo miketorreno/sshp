@@ -1,4 +1,5 @@
 import type { Appointment, Patient, User, Visit } from "@/generated/prisma";
+import { makeEventTable } from "@/server/archive-events/test-support/event-table";
 
 /**
  * An in-memory stand-in for the appointment and visit tables. Tests seed
@@ -8,8 +9,10 @@ import type { Appointment, Patient, User, Visit } from "@/generated/prisma";
  * module issues, so the module stays free to change how it asks the database.
  *
  * It understands only the query features the appointment module uses: equality,
- * case-insensitive `contains`, `not`, `in`, `orderBy`, `skip`, `take`, `select`,
- * and `include` of the `patient` and `provider` relations. The visit that a
+ * case-insensitive `contains`, `not`, `in`, `AND`/`OR` groups, a to-one `is`
+ * relation filter, the `gte`/`gt`/`lt` range and overlap of a window, `orderBy`
+ * by several keys, `skip`, `take`, `count`,
+ * `select`, and `include` of the `patient` and `provider` relations. The visit that a
  * check-in links is read from the visit table, exactly as the database joins it,
  * so the double cannot answer a question the database would not.
  */
@@ -26,16 +29,32 @@ type Table = {
     take?: number;
     include?: Record<string, Relation>;
   }) => Promise<Row[]>;
-  findFirst: (args: { where?: Condition; include?: Record<string, Relation> }) => Promise<Row | null>;
+  findFirst: (args: {
+    where?: Condition;
+    include?: Record<string, Relation>;
+  }) => Promise<Row | null>;
   create: (args: { data: Row }) => Promise<Row>;
   update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
   delete: (args: { where: { id: string } }) => Promise<Row>;
 };
 
+/**
+ * A table that can also be asked how many rows it has.
+ *
+ * Only the appointment table is: a list read reports the total beside its page so
+ * a pager knows whether a next page exists, and the archive's appointment list is
+ * the one that pages. `count` is a different question from a page of rows, so it
+ * is a separate method rather than a flag on `findMany`.
+ */
+type CountableTable = Table & {
+  count: (args?: { where?: Condition }) => Promise<number>;
+};
+
 type Store = {
-  appointment: Table;
+  appointment: CountableTable;
   visit: Table;
   patient: Pick<Table, "findFirst">;
+  archiveRestoreEvent: Table;
 };
 
 export type AppointmentTable = {
@@ -50,6 +69,8 @@ export type AppointmentTable = {
   visits: Row[];
   patients: Row[];
   users: Row[];
+  /** The archive/restore events written, in the order they were appended. */
+  events: Row[];
   /** Ids a caller tried to delete. The appointment module must never fill this. */
   destroyed: string[];
   findAppointment: (id: string) => Row | undefined;
@@ -62,31 +83,31 @@ export function createAppointmentTable(
     users?: Partial<User>[];
     appointments?: Partial<Appointment>[];
     visits?: Partial<Visit>[];
-  } = {}
+  } = {},
 ): AppointmentTable {
   const patients: Row[] = (seed.patients ?? []).map((row) => ({ ...row }));
   const users: Row[] = (seed.users ?? []).map((row) => ({ ...row }));
-  const appointments: Row[] = (seed.appointments ?? []).map((row) => ({ ...row }));
+  const appointments: Row[] = (seed.appointments ?? []).map((row) => ({
+    ...row,
+  }));
   const visits: Row[] = (seed.visits ?? []).map((row) => ({ ...row }));
+  const archiveEvents: Row[] = [];
   const destroyed: string[] = [];
   const relations: Relations = { patients, users, visits };
 
   const store: Store = {
     appointment: {
-      findMany: async ({
-        where,
-        orderBy,
-        skip = 0,
-        take,
-        include,
-      } = {}) => {
+      findMany: async ({ where, orderBy, skip = 0, take, include } = {}) => {
         const found = appointments.filter((row) =>
-          matches(withRelations(row, relations), where)
+          matches(withRelations(row, relations), where),
         );
 
-        for (const [field, direction] of Object.entries(orderBy ?? {})) {
+        // Applied from the least significant key, because each `sort` is stable:
+        // the first key named has to be the one that decides, the way SQL orders
+        // by it.
+        for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
           found.sort((left, right) =>
-            compare(left[field], right[field], direction)
+            compare(left[field], right[field], direction),
           );
         }
 
@@ -96,11 +117,15 @@ export function createAppointmentTable(
       },
       findFirst: async ({ where, include }) => {
         const found = appointments.find((row) =>
-          matches(withRelations(row, relations), where)
+          matches(withRelations(row, relations), where),
         );
 
         return found ? hydrateAppointment(found, include, relations) : null;
       },
+      count: async ({ where } = {}) =>
+        appointments.filter((row) =>
+          matches(withRelations(row, relations), where),
+        ).length,
       create: async ({ data }) => {
         const created: Row = {
           id: `appointment-${nextSerial(appointments, "appointment")}`,
@@ -144,9 +169,12 @@ export function createAppointmentTable(
       findMany: async ({ where, orderBy, skip = 0, take } = {}) => {
         const found = visits.filter((row) => matches(row, where));
 
-        for (const [field, direction] of Object.entries(orderBy ?? {})) {
+        // Applied from the least significant key, because each `sort` is stable:
+        // the first key named has to be the one that decides, the way SQL orders
+        // by it.
+        for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
           found.sort((left, right) =>
-            compare(left[field], right[field], direction)
+            compare(left[field], right[field], direction),
           );
         }
 
@@ -205,16 +233,20 @@ export function createAppointmentTable(
         return found ? { ...found } : null;
       },
     },
+    archiveRestoreEvent: makeEventTable(archiveEvents),
   };
 
   const snapshot = () =>
-    [appointments, visits].map((rows) => [...rows.map((row) => ({ ...row }))]);
+    [appointments, visits, archiveEvents].map((rows) => [
+      ...rows.map((row) => ({ ...row })),
+    ]);
 
   const restore = (before: Row[][]) => {
-    const [storedAppointments, storedVisits] = before;
+    const [storedAppointments, storedVisits, storedEvents] = before;
 
     appointments.splice(0, appointments.length, ...storedAppointments);
     visits.splice(0, visits.length, ...storedVisits);
+    archiveEvents.splice(0, archiveEvents.length, ...storedEvents);
   };
 
   return {
@@ -235,6 +267,7 @@ export function createAppointmentTable(
     visits,
     patients,
     users,
+    events: archiveEvents,
     destroyed,
     findAppointment: (id) => appointments.find((row) => row.id === id),
     findVisit: (id) => visits.find((row) => row.id === id),
@@ -263,7 +296,7 @@ function withRelations(row: Row, { patients, users }: Relations): Row {
 function hydrateAppointment(
   row: Row,
   include: Record<string, Relation> | undefined,
-  { patients, users }: Relations
+  { patients, users }: Relations,
 ): Row {
   if (!include) return { ...row };
 
@@ -282,7 +315,17 @@ function hydrateAppointment(
   return hydrated;
 }
 
-const FILTER_KEYS = new Set(["contains", "not", "in", "mode", "notIn"]);
+const FILTER_KEYS = new Set([
+  "contains",
+  "not",
+  "in",
+  "mode",
+  "notIn",
+  "gte",
+  "gt",
+  "lt",
+  "is",
+]);
 
 /**
  * `Visit.appointmentId` is unique in the database, so a second visit cannot claim
@@ -296,12 +339,12 @@ function requireUniqueAppointment(rows: Row[], candidate: Row): void {
   if (claimed == null) return;
 
   const taken = rows.some(
-    (row) => row.id !== candidate.id && row.appointmentId === claimed
+    (row) => row.id !== candidate.id && row.appointmentId === claimed,
   );
 
   if (taken) {
     throw new Error(
-      `unique constraint failed: Visit.appointmentId already claims ${String(claimed)}`
+      `unique constraint failed: Visit.appointmentId already claims ${String(claimed)}`,
     );
   }
 }
@@ -327,6 +370,14 @@ function matches(row: Row, where: Condition): boolean {
       return clauses.some((clause) => matches(row, clause));
     }
 
+    // `AND` is how a read keeps the active rule and adds a search beside it,
+    // rather than one replacing the other.
+    if (field === "AND") {
+      const clauses = (condition as Condition[]) ?? [];
+
+      return clauses.every((clause) => matches(row, clause));
+    }
+
     return matchesField(row[field], condition);
   });
 }
@@ -335,6 +386,12 @@ function matchesField(value: unknown, condition: unknown): boolean {
   if (condition === null || condition === undefined) return value == null;
 
   if (isRecord(condition)) {
+    // A to-one relation filter wrapped in `is`, which is how a search over the
+    // patient an appointment belongs to is written.
+    if (condition.is !== undefined) {
+      return matchesField(value, condition.is);
+    }
+
     if (condition.contains !== undefined) {
       return (
         String(value ?? "")
@@ -344,6 +401,33 @@ function matchesField(value: unknown, condition: unknown): boolean {
     }
 
     if (condition.not !== undefined) return value !== condition.not;
+
+    // A window. `gte`/`lt` is half-open, so consecutive windows neither drop a row
+    // starting exactly on the boundary nor return one twice; `gt` is how an
+    // overlap asks "did this end after the window opened?".
+    if (
+      condition.gte !== undefined ||
+      condition.gt !== undefined ||
+      condition.lt !== undefined
+    ) {
+      if (value == null) return false;
+
+      const valueTime = time(value);
+
+      if (condition.gte !== undefined && valueTime < time(condition.gte)) {
+        return false;
+      }
+
+      if (condition.gt !== undefined && valueTime <= time(condition.gt)) {
+        return false;
+      }
+
+      if (condition.lt !== undefined && valueTime >= time(condition.lt)) {
+        return false;
+      }
+
+      return true;
+    }
 
     if (condition.in !== undefined) {
       return (condition.in as unknown[]).includes(value);
@@ -365,22 +449,47 @@ function hasFilterKey(condition: Record<string, unknown>): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    !(value instanceof Date)
+    typeof value === "object" && value !== null && !(value instanceof Date)
   );
 }
 
+/**
+ * Orders two values the way the database orders them.
+ *
+ * Dates and instants compare as moments, and anything else compares as text — an id
+ * is ordered as text, which is what the id tie-break in an archive list relies on.
+ * Treating an id as a date would make every id the same value and leave the rows in
+ * whatever order they were stored in, which is the one thing a tie-break exists to
+ * prevent.
+ */
 function compare(
   left: unknown,
   right: unknown,
-  direction: "asc" | "desc"
+  direction: "asc" | "desc",
 ): number {
-  const leftTime = time(left);
-  const rightTime = time(right);
-  const order = leftTime === rightTime ? 0 : leftTime < rightTime ? -1 : 1;
+  const order =
+    left instanceof Date || right instanceof Date
+      ? compareTimes(left, right)
+      : compareText(left, right);
 
   return direction === "desc" ? -order : order;
+}
+
+/** Two instants, which is how the window and the archive order their columns. */
+function compareTimes(left: unknown, right: unknown): number {
+  const leftTime = time(left);
+  const rightTime = time(right);
+
+  return leftTime === rightTime ? 0 : leftTime < rightTime ? -1 : 1;
+}
+
+function compareText(left: unknown, right: unknown): number {
+  const leftText = String(left);
+  const rightText = String(right);
+
+  if (leftText === rightText) return 0;
+
+  return leftText < rightText ? -1 : 1;
 }
 
 function time(value: unknown): number {

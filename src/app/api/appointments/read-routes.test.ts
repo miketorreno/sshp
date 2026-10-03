@@ -9,8 +9,8 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createAppointmentTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { GET as detailGET } from "@/app/api/appointments/[id]/route";
@@ -22,7 +22,6 @@ const APPOINTMENT = {
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "user-1",
-  appointmentId: null,
   startDateTime: new Date("2026-03-02T09:00:00.000Z"),
   endDateTime: new Date("2026-03-02T09:30:00.000Z"),
   appointmentType: "CLINIC",
@@ -35,7 +34,12 @@ const APPOINTMENT = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const UNAUTHENTICATED_BODY = {
@@ -107,6 +111,63 @@ describe("appointment read routes", () => {
     await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
   });
 
+  it("answers a search read with only the appointments it found", async () => {
+    table.patients[0] = {
+      ...table.patients[0],
+      lastName: "Byron",
+    };
+
+    const response = await appointmentRoute.GET(listRequest("?search=Byron"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual([expect.objectContaining({ id: "appointment-1" })]);
+  });
+
+  it("answers a windowed read with every appointment in the window", async () => {
+    table.appointments.push({
+      ...APPOINTMENT,
+      id: "appointment-2",
+      startDateTime: new Date("2026-04-15T09:00:00.000Z"),
+      endDateTime: new Date("2026-04-15T09:30:00.000Z"),
+    });
+
+    const response = await appointmentRoute.GET(
+      listRequest("?from=2026-03-01T00:00:00.000Z&to=2026-04-01T00:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.map((read: { id: string }) => read.id)).toEqual([
+      "appointment-1",
+    ]);
+  });
+
+  it("refuses a window it cannot honour, rather than quietly reading a page", async () => {
+    // A calendar that sent a half-open window backwards would otherwise be
+    // answered with a page of the list: an empty-looking month that is really a
+    // question the read refused to ask.
+    const incomplete = await appointmentRoute.GET(
+      listRequest("?from=2026-03-01T00:00:00.000Z"),
+    );
+    const inverted = await appointmentRoute.GET(
+      listRequest("?from=2026-04-01T00:00:00.000Z&to=2026-03-01T00:00:00.000Z"),
+    );
+    const unparseable = await appointmentRoute.GET(
+      listRequest("?from=yesterday&to=2026-04-01T00:00:00.000Z"),
+    );
+
+    for (const response of [incomplete, inverted, unparseable]) {
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: {
+          code: FAILURE_CODES.INVALID_INPUT,
+          message: FAILURE_MESSAGES[FAILURE_CODES.INVALID_INPUT],
+        },
+      });
+    }
+  });
+
   it("answers a detail read with the detail DTO", async () => {
     const response = await detailRequest("appointment-1");
 
@@ -116,7 +177,7 @@ describe("appointment read routes", () => {
         id: "appointment-1",
         reason: "Annual check",
         updatedAt: "2026-01-02T03:04:05.000Z",
-      })
+      }),
     );
   });
 
@@ -125,7 +186,10 @@ describe("appointment read routes", () => {
 
     expect(missing.status).toBe(404);
     await expect(missing.json()).resolves.toEqual({
-      error: { code: FAILURE_CODES.NOT_FOUND, message: "Appointment not found" },
+      error: {
+        code: FAILURE_CODES.NOT_FOUND,
+        message: "Appointment not found",
+      },
     });
 
     table.appointments[0] = {
@@ -143,5 +207,27 @@ describe("appointment read routes", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
+  });
+
+  it("answers every appointment read with forbidden for an account that holds no appointment permission", async () => {
+    getSession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "PATIENT" },
+    });
+
+    const responses = [
+      await appointmentRoute.GET(listRequest()),
+      await detailRequest("appointment-1"),
+    ];
+
+    for (const response of responses) {
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+    }
   });
 });

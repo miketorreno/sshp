@@ -1,8 +1,9 @@
 "use client";
+import { useClinicTimeZone } from "@/components/clinic-time-zone-provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/utils";
+import { formatClinicDateTime } from "@/lib/clinic-time";
 import { useRouter } from "next/navigation";
 import { use, useActionState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,10 @@ type ImagingOrderActionState =
  * visit.
  */
 const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
+  // The clinic's zone, read from the server-rendered tree: a client component
+  // cannot read `process.env`, so it is handed down. See ADR 0004.
+  const zone = useClinicTimeZone();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = use(params);
@@ -89,7 +94,7 @@ const AddImagingRequest = ({ params }: { params: Promise<{ id: string }> }) => {
                 <Label htmlFor="visit">Visit</Label>
                 <Input
                   id="visit"
-                  value={`${formatDateTime(visit.startDateTime)} - ${visit.visitType}`}
+                  value={`${formatClinicDateTime(visit.startDateTime, zone)} - ${visit.visitType}`}
                   disabled
                 />
               </div>

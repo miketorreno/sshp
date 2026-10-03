@@ -8,20 +8,32 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createVisitTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
+import { withClinicTimeZone } from "@/lib/test-support/clinic-time";
 import {
+  PATIENT,
   SESSION,
   hoursFromStartOfToday,
-  localDay,
-  startOfToday,
+  clinicToday,
+  clinicYesterday,
+  imagingOrder,
+  labOrder,
+  medOrder,
   seedVisits,
   visit,
+  vitals,
 } from "@/server/visits/test-support/seed";
-import { getVisitDetail, listVisits } from "@/server/visits/reads";
+import {
+  getVisitDetail,
+  listArchivedOrders,
+  listArchivedVitals,
+  listArchivedVisits,
+  listVisits,
+} from "@/server/visits/reads";
 
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
@@ -111,10 +123,8 @@ describe("visit reads", () => {
         ],
       });
 
-      const today = localDay(new Date());
-      const yesterday = localDay(
-        new Date(startOfToday().getTime() - 3 * 3_600_000),
-      );
+      const today = clinicToday();
+      const yesterday = clinicYesterday();
 
       await expect(
         listVisits({ from: today, to: today }).then((reads) =>
@@ -129,6 +139,32 @@ describe("visit reads", () => {
       ).resolves.toEqual(["visit-yesterday"]);
     });
 
+    it("resolves a day window in the clinic's zone, not the server's", async () => {
+      // 01:30 on the third of March in Manila, but still the second of March in
+      // UTC. Which day a visit counts on is the clinic's question to answer.
+      seed({
+        visits: [visit({ startDateTime: new Date("2026-03-02T17:30:00.000Z") })],
+      });
+
+      const day = "2026-03-03";
+
+      await expect(
+        withClinicTimeZone("Asia/Manila", () =>
+          listVisits({ from: day, to: day }).then((reads) =>
+            reads.map((read) => read.id),
+          ),
+        ),
+      ).resolves.toEqual(["visit-1"]);
+
+      await expect(
+        withClinicTimeZone("UTC", () =>
+          listVisits({ from: day, to: day }).then((reads) =>
+            reads.map((read) => read.id),
+          ),
+        ),
+      ).resolves.toEqual([]);
+    });
+
     it("keeps a visit that checked in late and checked out the next morning", async () => {
       seed({
         visits: [
@@ -140,7 +176,7 @@ describe("visit reads", () => {
         ],
       });
 
-      const today = localDay(new Date());
+      const today = clinicToday();
 
       await expect(
         listVisits({ from: today, to: today }).then((reads) =>
@@ -148,9 +184,7 @@ describe("visit reads", () => {
         ),
       ).resolves.toEqual([]);
 
-      const yesterday = localDay(
-        new Date(startOfToday().getTime() - 3 * 3_600_000),
-      );
+      const yesterday = clinicYesterday();
 
       await expect(
         listVisits({ from: yesterday, to: yesterday }).then((reads) =>
@@ -381,6 +415,316 @@ describe("visit reads", () => {
 
       seed({ visits: [visit({ patientId: "patient-2" })] });
       await expect(detail("visit-1")).resolves.toBeNull();
+    });
+  });
+  describe("archive", () => {
+    /** An archived visit of the active patient, and one of the archived patient. */
+    const archivedVisits = () => [
+      visit({
+        id: "visit-archived",
+        startDateTime: new Date("2026-03-03T09:00:00.000Z"),
+        deletedAt: new Date("2026-04-01T08:00:00.000Z"),
+      }),
+      visit({
+        id: "visit-under-archived-patient",
+        patientId: "patient-2",
+        startDateTime: new Date("2026-03-04T09:00:00.000Z"),
+        deletedAt: new Date("2026-04-02T08:00:00.000Z"),
+      }),
+    ];
+
+    const asUser = () =>
+      getSession.mockResolvedValue({
+        ...SESSION,
+        user: { ...SESSION.user, role: "USER" },
+      });
+
+    describe("visits", () => {
+      it("refuses a session that cannot archive", async () => {
+        asUser();
+
+        await expect(listArchivedVisits()).rejects.toMatchObject({
+          name: "ForbiddenError",
+          failure: { code: FAILURE_CODES.FORBIDDEN },
+        });
+      });
+
+      it("returns the archived visits, most recently archived first", async () => {
+        seed({ visits: archivedVisits() });
+
+        await expect(listArchivedVisits()).resolves.toEqual({
+          rows: [
+            expect.objectContaining({
+              id: "visit-under-archived-patient",
+              visitType: "CLINIC",
+              startDateTime: "2026-03-04T09:00:00.000Z",
+              endDateTime: null,
+              reason: "Annual check",
+              patient: {
+                id: "patient-2",
+                name: `${PATIENT.firstName} ${PATIENT.middleName} ${PATIENT.lastName}`,
+              },
+              archivedAt: "2026-04-02T08:00:00.000Z",
+            }),
+            expect.objectContaining({
+              id: "visit-archived",
+              archivedAt: "2026-04-01T08:00:00.000Z",
+            }),
+          ],
+          page: 1,
+          pageSize: 20,
+          totalCount: 2,
+        });
+      });
+
+      it("names the patient to restore first when the patient is archived too", async () => {
+        // The command refuses this restore, and so does any read of the visit, so
+        // the archive unwinds from the patient down rather than from the visit up.
+        seed({ visits: archivedVisits() });
+
+        const { rows } = await listArchivedVisits();
+
+        expect(rows[0].restoreBlockedBy).toEqual({
+          recordType: "Patient",
+          id: "patient-2",
+          patientName: `${PATIENT.firstName} ${PATIENT.middleName} ${PATIENT.lastName}`,
+        });
+        expect(rows[1].restoreBlockedBy).toBeNull();
+      });
+
+      it("never offers a visit that is still open", async () => {
+        seed({ visits: [...archivedVisits(), visit()] });
+
+        const { rows } = await listArchivedVisits();
+
+        expect(rows.map((row) => row.id)).not.toContain("visit-1");
+      });
+
+      it("pages the archived visits and counts every one of them", async () => {
+        seed({ visits: archivedVisits() });
+
+        await expect(
+          listArchivedVisits({ limit: 1, page: 2 }),
+        ).resolves.toMatchObject({
+          rows: [expect.objectContaining({ id: "visit-archived" })],
+          page: 2,
+          pageSize: 1,
+          totalCount: 2,
+        });
+      });
+    });
+
+    describe("vitals", () => {
+      it("refuses a session that cannot archive", async () => {
+        asUser();
+
+        await expect(listArchivedVitals()).rejects.toMatchObject({
+          name: "ForbiddenError",
+          failure: { code: FAILURE_CODES.FORBIDDEN },
+        });
+      });
+
+      it("returns the archived readings with the patient and visit they belong to", async () => {
+        seed({
+          visits: archivedVisits(),
+          vitals: [
+            vitals({
+              id: "vitals-archived",
+              visitId: "visit-archived",
+              deletedAt: ARCHIVED_AT,
+            }),
+            vitals({
+              id: "vitals-in-archived-visit",
+              visitId: "visit-under-archived-patient",
+              deletedAt: ARCHIVED_AT,
+            }),
+          ],
+        });
+
+        await expect(listArchivedVitals()).resolves.toMatchObject({
+          rows: [
+            {
+              id: "vitals-in-archived-visit",
+              visitId: "visit-under-archived-patient",
+              recordedAt: "2026-03-02T09:30:00.000Z",
+              height: 165,
+              weight: 60,
+              systolicBP: 120,
+              diastolicBP: 80,
+              heartRate: 72,
+              patient: { id: "patient-2", name: "Ada Quincy Lovelace" },
+              archivedAt: ARCHIVED_AT.toISOString(),
+              restoreBlockedBy: {
+                recordType: "Patient",
+                id: "patient-2",
+                patientName: "Ada Quincy Lovelace",
+              },
+            },
+            expect.objectContaining({
+              id: "vitals-archived",
+              visitId: "visit-archived",
+              // The reading is restorable only once its visit is back, whatever the
+              // patient: the visit is what the reading was recorded during.
+              restoreBlockedBy: {
+                recordType: "Visit",
+                id: "visit-archived",
+                patientName: "Ada Quincy Lovelace",
+              },
+            }),
+          ],
+          totalCount: 2,
+        });
+      });
+
+      it("names the visit to restore first when the visit is archived", async () => {
+        // The visit is what has to come back before the reading does: a reading is
+        // recorded during a visit, and restoring it into an archived one would
+        // leave it unreadable.
+        seed({
+          visits: archivedVisits(),
+          vitals: [
+            vitals({
+              id: "vitals-archived",
+              visitId: "visit-archived",
+              deletedAt: ARCHIVED_AT,
+            }),
+          ],
+        });
+
+        const { rows } = await listArchivedVitals();
+
+        expect(rows[0].restoreBlockedBy).toEqual({
+          recordType: "Visit",
+          id: "visit-archived",
+          patientName: "Ada Quincy Lovelace",
+        });
+      });
+
+      it("never offers a reading that is still on the visit", async () => {
+        seed({
+          visits: archivedVisits(),
+          vitals: [
+            vitals({ visitId: "visit-archived" }),
+            vitals({
+              id: "vitals-archived",
+              visitId: "visit-archived",
+              deletedAt: ARCHIVED_AT,
+            }),
+          ],
+        });
+
+        const { rows } = await listArchivedVitals();
+
+        expect(rows.map((row) => row.id)).toEqual(["vitals-archived"]);
+      });
+    });
+
+    describe("orders", () => {
+      const archivedOrderSeeds = () => ({
+        visits: archivedVisits(),
+        labOrders: [
+          labOrder({ id: "lab-archived", visitId: "visit-archived", deletedAt: ARCHIVED_AT }),
+          labOrder({ id: "lab-active" }),
+        ],
+        imagingOrders: [
+          imagingOrder({
+            id: "imaging-archived",
+            visitId: "visit-under-archived-patient",
+            deletedAt: ARCHIVED_AT,
+          }),
+        ],
+        medOrders: [
+          medOrder({
+            id: "med-archived",
+            visitId: "visit-archived",
+            deletedAt: new Date("2026-04-03T08:00:00.000Z"),
+          }),
+          medOrder({ id: "med-active" }),
+        ],
+        medications: [{ id: "medication-1", name: "Amoxicillin" }],
+      });
+
+      it("refuses a session that cannot archive", async () => {
+        asUser();
+
+        await expect(listArchivedOrders()).rejects.toMatchObject({
+          name: "ForbiddenError",
+          failure: { code: FAILURE_CODES.FORBIDDEN },
+        });
+      });
+
+      it("lists the three kinds of order as one list, most recent archive first", async () => {
+        seed(archivedOrderSeeds());
+
+        // One list rather than three, because the three tables are one thing to a
+        // reader: the orders that were archived.
+        await expect(listArchivedOrders()).resolves.toEqual({
+          rows: [
+            {
+              kind: "MEDICATION",
+              id: "med-archived",
+              visitId: "visit-archived",
+              orderedAt: "2026-03-02T09:37:00.000Z",
+              orderStatus: "REQUESTED",
+              orderName: "Amoxicillin",
+              instructions: "500mg, Twice a day, Oral",
+              patient: { id: "patient-1", name: "Ada Quincy Lovelace" },
+              archivedAt: "2026-04-03T08:00:00.000Z",
+              restoreBlockedBy: {
+                recordType: "Visit",
+                id: "visit-archived",
+                patientName: "Ada Quincy Lovelace",
+              },
+            },
+            expect.objectContaining({
+              kind: "LAB",
+              id: "lab-archived",
+              orderName: "Complete Blood Count",
+              instructions: null,
+            }),
+            expect.objectContaining({
+              kind: "IMAGING",
+              id: "imaging-archived",
+              orderName: "Chest X-Ray (2 views)",
+              instructions: null,
+              restoreBlockedBy: {
+                recordType: "Patient",
+                id: "patient-2",
+                patientName: "Ada Quincy Lovelace",
+              },
+            }),
+          ],
+          page: 1,
+          pageSize: 20,
+          totalCount: 3,
+        });
+      });
+
+      it("pages across the three tables rather than through one of them", async () => {
+        seed(archivedOrderSeeds());
+
+        // The second page has to be the second page of the merged list. Reading each
+        // table's own page instead would repeat and drop orders depending on which
+        // table they happened to land in.
+        const first = await listArchivedOrders({ limit: 2 });
+        const second = await listArchivedOrders({ limit: 2, page: 2 });
+
+        expect(first.rows.map((row) => row.id)).toEqual([
+          "med-archived",
+          "lab-archived",
+        ]);
+        expect(second.rows.map((row) => row.id)).toEqual(["imaging-archived"]);
+        expect(second.totalCount).toBe(3);
+      });
+
+      it("never offers an order that is still open", async () => {
+        seed(archivedOrderSeeds());
+
+        const { rows } = await listArchivedOrders();
+
+        expect(rows.map((row) => row.id)).not.toContain("lab-active");
+        expect(rows.map((row) => row.id)).not.toContain("med-active");
+      });
     });
   });
 });

@@ -21,8 +21,8 @@ const { table, getSession, revalidatePath, redirect } = await vi.hoisted(
   }
 );
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({
@@ -31,22 +31,27 @@ vi.mock("next/navigation", () => ({
 
 import {
   checkInAppointment,
+  restoreAppointment,
   createAppointment,
-  deleteAppointment,
+  archiveAppointment,
   updateAppointment,
 } from "@/app/actions/appointment-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "reception@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "reception@clinic.test",
+    role: "RECEPTIONIST",
+    isActive: true,
+  },
 };
 
 const APPOINTMENT = {
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "user-1",
-  appointmentId: null,
   startDateTime: new Date("2026-03-02T09:00:00.000Z"),
   endDateTime: new Date("2026-03-02T09:30:00.000Z"),
   appointmentType: "CLINIC",
@@ -57,8 +62,24 @@ const APPOINTMENT = {
   deletedAt: null as Date | null,
 };
 
-const seed = () => {
-  table.appointments.splice(0, table.appointments.length, { ...APPOINTMENT });
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
+
+const seed = (overrides: {
+  archived?: Date | null;
+  patientArchived?: boolean;
+} = {}) => {
+  // A fresh row each time: a command restores the row it finds in place, so a shared
+  // fixture would come back already restored for the next case.
+  table.appointments.splice(0, table.appointments.length, {
+    ...APPOINTMENT,
+    deletedAt: overrides.archived ?? null,
+  });
   table.visits.splice(0, table.visits.length);
   table.patients.splice(0, table.patients.length, {
     id: "patient-1",
@@ -66,7 +87,7 @@ const seed = () => {
     firstName: "Ada",
     middleName: "Quincy",
     lastName: "Lovelace",
-    deletedAt: null,
+    deletedAt: overrides.patientArchived ? ARCHIVED_AT : null,
   });
   table.users.splice(0, table.users.length, {
     id: "user-1",
@@ -125,7 +146,7 @@ describe("appointment form commands", () => {
     await expect(
       updateAppointment(appointmentForm({ id: "appointment-1" }))
     ).resolves.toEqual(signedOut);
-    await expect(deleteAppointment("appointment-1")).resolves.toEqual(
+    await expect(archiveAppointment("appointment-1")).resolves.toEqual(
       signedOut
     );
     await expect(checkInAppointment("appointment-1")).resolves.toEqual(
@@ -216,8 +237,8 @@ describe("appointment form commands", () => {
       expect(created).toMatchObject({
         patientId: "patient-1",
         providerId: "user-1",
-        startDateTime: new Date("2026-03-05T09:00:00"),
-        endDateTime: new Date("2026-03-05T09:30:00"),
+        startDateTime: new Date("2026-03-05T09:00:00Z"),
+        endDateTime: new Date("2026-03-05T09:30:00Z"),
         appointmentType: "IMAGING",
         appointmentStatus: "SCHEDULED",
         reason: "Annual check",
@@ -252,8 +273,8 @@ describe("appointment form commands", () => {
       ).rejects.toBeInstanceOf(RedirectSignal);
 
       expect(table.findAppointment("appointment-1")).toMatchObject({
-        startDateTime: new Date("2026-03-06T11:00:00"),
-        endDateTime: new Date("2026-03-06T11:20:00"),
+        startDateTime: new Date("2026-03-06T11:00:00Z"),
+        endDateTime: new Date("2026-03-06T11:20:00Z"),
         appointmentStatus: "CANCELLED",
         patientId: "patient-1",
       });
@@ -292,9 +313,9 @@ describe("appointment form commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the appointment and reports it, so the client can invalidate", async () => {
-      const result = await deleteAppointment("appointment-1");
+      const result = await archiveAppointment("appointment-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "appointment-1" } });
       expect(revalidatePath).toHaveBeenCalledWith("/appointments/all");
@@ -303,7 +324,7 @@ describe("appointment form commands", () => {
     });
 
     it("never deletes the appointment row", async () => {
-      await deleteAppointment("appointment-1");
+      await archiveAppointment("appointment-1");
 
       expect(table.destroyed).toEqual([]);
       expect(table.findAppointment("appointment-1")?.deletedAt).toBeInstanceOf(
@@ -339,6 +360,56 @@ describe("appointment form commands", () => {
         },
       });
       expect(table.visits).toHaveLength(1);
+    });
+  });
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(ADMIN);
+      seed({ archived: ARCHIVED_AT });
+    });
+
+    it("restores the appointment and revalidates the pages it returns to", async () => {
+      const result = await restoreAppointment("appointment-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "appointment-1" } });
+      expect(table.findAppointment("appointment-1")?.deletedAt).toBeNull();
+      expect(revalidatePath).toHaveBeenCalledWith("/appointments/all");
+      expect(revalidatePath).toHaveBeenCalledWith("/appointments/calendar");
+      expect(redirect).not.toHaveBeenCalled();
+    });
+
+    it("refuses a clinician, who may archive an appointment but not bring one back", async () => {
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restoreAppointment("appointment-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+      expect(table.findAppointment("appointment-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("reports an appointment whose patient is still archived", async () => {
+      // The archive unwinds from the top down, so this refusal is the answer, not a
+      // fault: the archive screen shows the row with the patient to restore first.
+      seed({ archived: ARCHIVED_AT, patientArchived: true });
+
+      await expect(restoreAppointment("appointment-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.NOT_FOUND,
+          message: "Appointment not found",
+        },
+      });
+      expect(table.findAppointment("appointment-1")?.deletedAt).toEqual(
+        ARCHIVED_AT,
+      );
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
   });
 });

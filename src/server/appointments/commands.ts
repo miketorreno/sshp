@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import {
   actionSuccess,
   internalFailure,
@@ -6,7 +6,8 @@ import {
   type ActionFailureResult,
   type ActionResult,
 } from "@/lib/action-result";
-import { getSession, unauthenticatedFailure } from "@/lib/session";
+import { appendArchiveEvent } from "@/server/archive-events/log";
+import { PERMISSIONS, authorize } from "@/server/access";
 import type { AppointmentType, AppointmentStatus, VisitType } from "@/generated/prisma";
 import {
   APPOINTMENT_ALREADY_CHECKED_IN,
@@ -15,12 +16,12 @@ import {
 } from "./contract";
 
 /**
- * Appointment write commands. Each one requires a session, verifies the
- * appointment it addresses is an active one for an active patient, and answers
- * with a stable result instead of throwing.
+ * Appointment write commands. Each one requires a session holding the permission
+ * its change needs, verifies the appointment it addresses is an active one for an
+ * active patient, and answers with a stable result instead of throwing.
  *
- * Deleting an appointment archives it: the row stays for history and normal reads
- * stop returning it.
+ * Archiving an appointment keeps the row for history and stops normal reads from
+ * returning it.
  */
 
 export type AppointmentInput = {
@@ -39,6 +40,12 @@ export type AppointmentWriteResult = { id: string };
 
 export type AppointmentArchiveResult = { id: string; archivedAt: string };
 
+/**
+ * `restoredAt` is null when the appointment was already active, so a retried
+ * restore reports that there was no archive left to reverse.
+ */
+export type AppointmentRestoreResult = { id: string; restoredAt: string | null };
+
 export type CheckInResult = { appointmentId: string; visitId: string };
 
 const ACTIVE_APPOINTMENT = {
@@ -49,22 +56,23 @@ const ACTIVE_APPOINTMENT = {
 export async function createAppointment(
   input: AppointmentInput
 ): Promise<ActionResult<AppointmentWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_WRITE);
+  if (!actor.ok) return actor;
 
   if (!(await isActivePatient(input.patientId)))
     return knownFailure(APPOINTMENT_PATIENT_NOT_FOUND);
 
   try {
-    const created = await prisma.appointment.create({
+    const created = await getPrisma().appointment.create({
       data: {
         patientId: input.patientId,
-        providerId: session.user.id,
+        providerId: actor.data.user.id,
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         appointmentType: input.appointmentType,
         appointmentStatus: input.appointmentStatus,
         reason: input.reason,
+        createdById: actor.data.user.id,
       },
     });
 
@@ -78,15 +86,15 @@ export async function updateAppointment(
   appointmentId: string,
   input: AppointmentEdit
 ): Promise<ActionResult<AppointmentWriteResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_WRITE);
+  if (!actor.ok) return actor;
 
   const appointment = await findActiveAppointment(appointmentId);
 
   if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
 
   try {
-    const updated = await prisma.appointment.update({
+    const updated = await getPrisma().appointment.update({
       where: { id: appointment.id },
       data: {
         startDateTime: input.startDateTime,
@@ -94,6 +102,7 @@ export async function updateAppointment(
         appointmentType: input.appointmentType,
         appointmentStatus: input.appointmentStatus,
         reason: input.reason,
+        updatedById: actor.data.user.id,
       },
     });
 
@@ -105,17 +114,17 @@ export async function updateAppointment(
 
 /**
  * Archives an appointment. Archiving an already archived appointment is
- * idempotent, so a retried delete does not report a failure for work that is
+ * idempotent, so a retried archive does not report a failure for work that is
  * already done.
  */
-export async function deleteAppointment(
+export async function archiveAppointment(
   appointmentId: string
 ): Promise<ActionResult<AppointmentArchiveResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_ARCHIVE);
+  if (!actor.ok) return actor;
 
   try {
-    const appointment = await prisma.appointment.findFirst({
+    const appointment = await getPrisma().appointment.findFirst({
       where: { id: appointmentId },
       select: { id: true, deletedAt: true },
     });
@@ -130,14 +139,81 @@ export async function deleteAppointment(
     }
 
     const archivedAt = new Date();
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: { deletedAt: archivedAt },
+    await getPrisma().$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { deletedAt: archivedAt, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "ARCHIVE",
+        recordType: "Appointment",
+        recordId: appointment.id,
+        actorId: actor.data.user.id,
+        occurredAt: archivedAt,
+      });
     });
 
     return actionSuccess({
       id: appointment.id,
       archivedAt: archivedAt.toISOString(),
+    });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+/**
+ * Reverses an archive: the appointment returns to the calendar, the list, and the
+ * day's schedule.
+ *
+ * Idempotent, like archiving is, so a retried restore reports the outcome the
+ * caller wanted. It restores the appointment alone: an appointment whose patient
+ * is still archived is refused with the same NOT_FOUND the archive reported, so an
+ * archive unwinds from the top down rather than leaving an appointment that no read
+ * can reach. A checked-in appointment keeps its check-in, because that is a fact
+ * about the patient rather than a consequence of the archive; the visit it opened
+ * stays archived until it is restored in its own turn.
+ */
+export async function restoreAppointment(
+  appointmentId: string
+): Promise<ActionResult<AppointmentRestoreResult>> {
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_RESTORE);
+  if (!actor.ok) return actor;
+
+  try {
+    // The lookup ignores `deletedAt` on purpose — an archived appointment is
+    // precisely the row this command is here to find — and insists on an active
+    // patient, because an appointment of an archived patient is not reachable by
+    // any read.
+    const appointment = await getPrisma().appointment.findFirst({
+      where: { id: appointmentId, patient: { deletedAt: null } },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
+
+    if (!appointment.deletedAt) {
+      return actionSuccess({ id: appointment.id, restoredAt: null });
+    }
+
+    const restoredAt = new Date();
+    await getPrisma().$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { deletedAt: null, updatedById: actor.data.user.id },
+      });
+      await appendArchiveEvent(tx, {
+        action: "RESTORE",
+        recordType: "Appointment",
+        recordId: appointment.id,
+        actorId: actor.data.user.id,
+        occurredAt: restoredAt,
+      });
+    });
+
+    return actionSuccess({
+      id: appointment.id,
+      restoredAt: restoredAt.toISOString(),
     });
   } catch (error) {
     return writeFailure(error);
@@ -159,11 +235,11 @@ export async function deleteAppointment(
 export async function checkInAppointment(
   appointmentId: string
 ): Promise<ActionResult<CheckInResult>> {
-  const session = await getSession();
-  if (!session) return unauthenticatedFailure();
+  const actor = await authorize(PERMISSIONS.APPOINTMENTS_CHECK_IN);
+  if (!actor.ok) return actor;
 
   try {
-    const appointment = await prisma.appointment.findFirst({
+    const appointment = await getPrisma().appointment.findFirst({
       where: { id: appointmentId, ...ACTIVE_APPOINTMENT },
       select: {
         id: true,
@@ -177,19 +253,19 @@ export async function checkInAppointment(
 
     if (!appointment) return knownFailure(APPOINTMENT_NOT_FOUND);
 
-    const alreadyCheckedIn = await prisma.visit.findFirst({
+    const alreadyCheckedIn = await getPrisma().visit.findFirst({
       where: { appointmentId: appointment.id },
       select: { id: true },
     });
 
     if (alreadyCheckedIn) return knownFailure(APPOINTMENT_ALREADY_CHECKED_IN);
 
-    const visit = await prisma.$transaction(async (tx) => {
+    const visit = await getPrisma().$transaction(async (tx) => {
       const opened = await tx.visit.create({
         data: {
           patientId: appointment.patientId,
-          providerId: appointment.providerId ?? session.user.id,
-          createdById: session.user.id,
+          providerId: appointment.providerId ?? actor.data.user.id,
+          createdById: actor.data.user.id,
           appointmentId: appointment.id,
           visitType: visitTypeFor(appointment.appointmentType),
           startDateTime: appointment.startDateTime,
@@ -199,7 +275,12 @@ export async function checkInAppointment(
 
       await tx.appointment.update({
         where: { id: appointment.id },
-        data: { appointmentStatus: "ATTENDED" },
+        // Checking in is an edit of the appointment, so it names its actor the
+        // same way every other write to one does.
+        data: {
+          appointmentStatus: "ATTENDED",
+          updatedById: actor.data.user.id,
+        },
       });
 
       return opened;
@@ -213,14 +294,14 @@ export async function checkInAppointment(
 
 /** The active appointment the path addressed, or null when it is not usable. */
 async function findActiveAppointment(appointmentId: string) {
-  return prisma.appointment.findFirst({
+  return getPrisma().appointment.findFirst({
     where: { id: appointmentId, ...ACTIVE_APPOINTMENT },
     select: { id: true, patientId: true, startDateTime: true },
   });
 }
 
 async function isActivePatient(patientId: string): Promise<boolean> {
-  const patient = await prisma.patient.findFirst({
+  const patient = await getPrisma().patient.findFirst({
     where: { id: patientId, deletedAt: null },
     select: { id: true },
   });

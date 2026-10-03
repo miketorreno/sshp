@@ -8,15 +8,18 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createAppointmentTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
+import { formatClinicDateTime } from "@/lib/clinic-time";
+import { withClinicTimeZone } from "@/lib/test-support/clinic-time";
 import {
   checkInAppointment,
   createAppointment,
-  deleteAppointment,
+  archiveAppointment,
+  restoreAppointment,
   updateAppointment,
   type AppointmentEdit,
   type AppointmentInput,
@@ -44,7 +47,6 @@ const APPOINTMENT = {
   id: "appointment-1",
   patientId: "patient-1",
   providerId: "user-1",
-  appointmentId: null,
   startDateTime: INPUT.startDateTime,
   endDateTime: INPUT.endDateTime,
   appointmentType: "CLINIC",
@@ -78,7 +80,12 @@ const ARCHIVED_PATIENT = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "reception@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "reception@clinic.test",
+    role: "RECEPTIONIST",
+    isActive: true,
+  },
 };
 
 const seed = ({
@@ -112,7 +119,14 @@ const seed = ({
     deletedAt: null,
   });
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
 };
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const signedOut = {
   ok: false,
@@ -159,7 +173,7 @@ describe("appointment write commands", () => {
     const results = await Promise.all([
       createAppointment({ ...INPUT, patientId: "patient-1" }),
       updateAppointment("appointment-1", EDIT),
-      deleteAppointment("appointment-1"),
+      archiveAppointment("appointment-1"),
       checkInAppointment("appointment-1"),
     ]);
 
@@ -173,6 +187,30 @@ describe("appointment write commands", () => {
   });
 
   describe("create", () => {
+    it("keeps the moment it was given, whichever zone that moment is read in", async () => {
+      await withClinicTimeZone("Asia/Manila", () =>
+        createAppointment({
+          ...INPUT,
+          startDateTime: new Date("2026-03-03T02:00:00.000Z"),
+          endDateTime: new Date("2026-03-03T02:30:00.000Z"),
+        }),
+      );
+
+      const created = table.appointments.find(
+        (row) => row.id !== APPOINTMENT.id && row.id !== ARCHIVED.id,
+      );
+
+      // 10:00 in Manila. Stored as the instant it names, so the detail read
+      // formats it back as 10:00 rather than as whatever the server's zone says.
+      await expect(
+        withClinicTimeZone("Asia/Manila", () =>
+          getAppointmentDetail(String(created?.id)).then((read) =>
+            read && formatClinicDateTime(read.startDateTime, "Asia/Manila"),
+          ),
+        ),
+      ).resolves.toBe("Mar 03, 2026, 10:00");
+    });
+
     it("records an appointment for an active patient and reads it back", async () => {
       const result = await createAppointment({
         ...INPUT,
@@ -208,6 +246,18 @@ describe("appointment write commands", () => {
       );
 
       expect(created?.providerId).toBe("user-1");
+    });
+
+    it("names the staff member who booked the appointment", async () => {
+      await createAppointment(INPUT);
+
+      const created = table.appointments.find(
+        (row) => row.id !== APPOINTMENT.id && row.id !== ARCHIVED.id,
+      );
+
+      // `providerId` is who the appointment is with; `createdById` is who booked
+      // it, which is a different question and the one the schema could not answer.
+      expect(created?.createdById).toBe("user-1");
     });
 
     it("refuses a patient who is missing or archived", async () => {
@@ -260,6 +310,14 @@ describe("appointment write commands", () => {
       });
     });
 
+    it("names the staff member who edited the appointment", async () => {
+      await updateAppointment("appointment-1", EDIT);
+
+      expect(table.findAppointment("appointment-1")).toMatchObject({
+        updatedById: "user-1",
+      });
+    });
+
     it("never moves an appointment to another patient", async () => {
       await updateAppointment("appointment-1", EDIT);
 
@@ -286,9 +344,9 @@ describe("appointment write commands", () => {
     });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the appointment instead of destroying it", async () => {
-      const result = await deleteAppointment("appointment-1");
+      const result = await archiveAppointment("appointment-1");
 
       expect(result.ok).toBe(true);
       expect(table.destroyed).toEqual([]);
@@ -306,13 +364,13 @@ describe("appointment write commands", () => {
     });
 
     it("takes the appointment out of the normal reads", async () => {
-      await deleteAppointment("appointment-1");
+      await archiveAppointment("appointment-1");
 
       await expect(getAppointmentDetail("appointment-1")).resolves.toBeNull();
     });
 
     it("is idempotent for an already archived appointment", async () => {
-      const result = await deleteAppointment(ARCHIVED.id);
+      const result = await archiveAppointment(ARCHIVED.id);
 
       expect(result).toEqual({
         ok: true,
@@ -324,8 +382,45 @@ describe("appointment write commands", () => {
       expect(table.findAppointment(ARCHIVED.id)).toEqual(ARCHIVED);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archiveAppointment("appointment-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Appointment",
+          recordId: "appointment-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      await archiveAppointment(ARCHIVED.id);
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archiveAppointment("appointment-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.findAppointment("appointment-1")?.deletedAt).toBeNull();
+    });
+
     it("reports an unknown appointment as not found", async () => {
-      await expect(deleteAppointment("appointment-404")).resolves.toEqual(
+      await expect(archiveAppointment("appointment-404")).resolves.toEqual(
         notFound
       );
       expect(table.destroyed).toEqual([]);
@@ -352,6 +447,9 @@ describe("appointment write commands", () => {
       expect(table.findAppointment("appointment-1")?.appointmentStatus).toBe(
         "ATTENDED"
       );
+      // Checking in edits the appointment, so it has to name who did it as well
+      // as marking it attended.
+      expect(table.findAppointment("appointment-1")?.updatedById).toBe("user-1");
 
       await expect(
         getAppointmentDetail("appointment-1")
@@ -441,6 +539,144 @@ describe("appointment write commands", () => {
         notFound
       );
       expect(table.visits).toEqual([]);
+    });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockReset().mockResolvedValue(sessionFor("ADMIN"));
+    });
+
+    it("brings the appointment back into the normal reads", async () => {
+      await expect(
+        getAppointmentDetail(ARCHIVED.id),
+      ).resolves.toBeNull();
+
+      const result = await restoreAppointment(ARCHIVED.id);
+
+      expect(result.ok).toBe(true);
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toBeNull();
+      await expect(
+        getAppointmentDetail(ARCHIVED.id),
+      ).resolves.toMatchObject({ id: ARCHIVED.id });
+    });
+
+    it("is idempotent for an appointment that is already active", async () => {
+      const result = await restoreAppointment("appointment-1");
+
+      expect(result).toEqual({
+        ok: true,
+        data: { id: "appointment-1", restoredAt: null },
+      });
+      expect(table.events).toEqual([]);
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restoreAppointment(ARCHIVED.id);
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Appointment",
+          recordId: ARCHIVED.id,
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("keeps both events of an archive and its restore", async () => {
+      getSession.mockResolvedValue(SESSION);
+      await archiveAppointment("appointment-1");
+
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      await restoreAppointment("appointment-1");
+
+      expect(table.events.map((event) => event.action)).toEqual([
+        "ARCHIVE",
+        "RESTORE",
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt,
+      );
+    });
+
+    it("reports an unknown appointment as not found", async () => {
+      await expect(restoreAppointment("appointment-404")).resolves.toEqual(
+        notFound
+      );
+    });
+
+    it("refuses to restore an appointment whose patient is out of the way itself", async () => {
+      table.appointments[1] = {
+        ...ARCHIVED,
+        patientId: ARCHIVED_PATIENT.id,
+      };
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toEqual(notFound);
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt
+      );
+    });
+
+    it("refuses a restore to the front desk, which may archive but not restore", async () => {
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restoreAppointment(ARCHIVED.id)).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
+      expect(table.findAppointment(ARCHIVED.id)?.deletedAt).toEqual(
+        ARCHIVED.deletedAt
+      );
+    });
+  });
+
+  describe("roles", () => {
+    it("refuses booking, archiving, and checking in to a role that only reads appointments", async () => {
+      getSession.mockResolvedValue(sessionFor("LAB_TECHNICIAN"));
+
+      for (const result of [
+        await createAppointment({ ...INPUT, patientId: "patient-1" }),
+        await updateAppointment("appointment-1", EDIT),
+        await archiveAppointment("appointment-1"),
+        await checkInAppointment("appointment-1"),
+      ]) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: FAILURE_CODES.FORBIDDEN },
+        });
+      }
+
+      expect(table.appointments[0]).toEqual(APPOINTMENT);
+      expect(table.visits).toEqual([]);
+    });
+
+    it("refuses booking anything to a patient account", async () => {
+      getSession.mockResolvedValue(sessionFor("PATIENT"));
+
+      await expect(
+        createAppointment({ ...INPUT, patientId: "patient-1" }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: { code: FAILURE_CODES.FORBIDDEN },
+      });
     });
   });
 });

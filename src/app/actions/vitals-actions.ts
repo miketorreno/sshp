@@ -8,9 +8,11 @@ import {
 } from "@/lib/action-result";
 import { visitPage } from "@/server/visits/contract";
 import {
-  deleteVitals as deleteVitalsCommand,
+  archiveVitals as archiveVitalsCommand,
+  restoreVitals as restoreVitalsCommand,
   recordVitals as recordVitalsCommand,
   type VitalsArchiveResult,
+  type VitalsRestoreResult,
   type VitalsWriteResult,
 } from "@/server/visits/vitals-commands";
 import {
@@ -61,14 +63,34 @@ export async function addVitals(
 }
 
 /**
+ * Reported rather than redirected, because the caller is the archive and stays in it.
+ *
+ * A reading is addressed by its visit as well as its own id, so both travel here; a
+ * reading whose visit is still archived is refused by the command, and the archive
+ * screen already names the visit to restore first.
+ */
+export async function restoreVitals(
+  visitId: string,
+  vitalsId: string,
+): Promise<ActionResult<VitalsRestoreResult>> {
+  const result = await restoreVitalsCommand(visitId, vitalsId);
+
+  if (!result.ok) return result;
+
+  revalidatePath(visitPage(visitId));
+
+  return result;
+}
+
+/**
  * Archiving vitals is a button rather than a form submission: it reports the
  * archive so the caller can invalidate the reads it changed.
  */
-export async function deleteVitals(
+export async function archiveVitals(
   visitId: string,
   vitalsId: string,
 ): Promise<ActionResult<VitalsArchiveResult>> {
-  const result = await deleteVitalsCommand(visitId, vitalsId);
+  const result = await archiveVitalsCommand(visitId, vitalsId);
 
   if (!result.ok) return result;
 

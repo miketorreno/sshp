@@ -12,6 +12,9 @@ import {
   archiveImagingOrder as archiveImagingOrderCommand,
   archiveLabOrder as archiveLabOrderCommand,
   archiveMedicationOrder as archiveMedicationOrderCommand,
+  restoreImagingOrder as restoreImagingOrderCommand,
+  restoreLabOrder as restoreLabOrderCommand,
+  restoreMedicationOrder as restoreMedicationOrderCommand,
   requestImagingOrder as requestImagingOrderCommand,
   requestLabOrder as requestLabOrderCommand,
   requestMedicationOrder as requestMedicationOrderCommand,
@@ -19,6 +22,7 @@ import {
   type LabOrderInput,
   type MedicationOrderInput,
   type OrderArchiveResult,
+  type OrderRestoreResult,
   type OrderWriteResult,
 } from "@/server/visits/order-commands";
 import {
@@ -117,7 +121,7 @@ async function requestOrder<Input>(
  * Archiving an order is a button rather than a form submission: it reports the
  * archive so the caller can invalidate the reads it changed.
  */
-export async function deleteLabOrder(
+export async function archiveLabOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
@@ -126,7 +130,7 @@ export async function deleteLabOrder(
   return revalidated(result, visitId);
 }
 
-export async function deleteImagingOrder(
+export async function archiveImagingOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
@@ -135,11 +139,47 @@ export async function deleteImagingOrder(
   return revalidated(result, visitId);
 }
 
-export async function deleteMedicationOrder(
+export async function archiveMedicationOrder(
   visitId: string,
   orderId: string,
 ): Promise<ActionResult<OrderArchiveResult>> {
   const result = await archiveMedicationOrderCommand(visitId, orderId);
+
+  return revalidated(result, visitId);
+}
+
+/**
+ * Restoring an order, one command per table: lab, imaging, and medication are three
+ * tables and one thing to a reader, so the row says which it came from and the
+ * command addresses it by its visit as well as its own id.
+ *
+ * Reported rather than redirected, because the caller is the archive and stays in it;
+ * an order whose visit is still archived is refused, and the archive screen already
+ * names the visit to restore first.
+ */
+export async function restoreLabOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  const result = await restoreLabOrderCommand(visitId, orderId);
+
+  return revalidated(result, visitId);
+}
+
+export async function restoreImagingOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  const result = await restoreImagingOrderCommand(visitId, orderId);
+
+  return revalidated(result, visitId);
+}
+
+export async function restoreMedicationOrder(
+  visitId: string,
+  orderId: string,
+): Promise<ActionResult<OrderRestoreResult>> {
+  const result = await restoreMedicationOrderCommand(visitId, orderId);
 
   return revalidated(result, visitId);
 }

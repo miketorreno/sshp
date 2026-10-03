@@ -7,11 +7,17 @@
  * module stays free to change how it asks the database.
  *
  * It understands only the query features the visit surface uses: equality, `in`,
- * date comparisons (`gte`, `lt`), `orderBy`, `skip`, `take`, `select`, and
- * `include` of a single record or a list of records, nested one level deep. A
- * record that belongs to another visit is joined the way the database joins it,
- * so the double cannot answer a question the database would not.
+ * `not`, date comparisons (`gte`, `lt`), `orderBy` by several keys, `skip`,
+ * `take`, `count`, `select`, and `include` of a single record or a list of
+ * records, nested. A record that belongs to another visit is joined the way the
+ * database joins it, so the double cannot answer a question the database would
+ * not.
  */
+
+import {
+  makeEventTable,
+  type EventTable,
+} from "@/server/archive-events/test-support/event-table";
 
 type Row = Record<string, unknown>;
 type Condition = Record<string, unknown> | null | undefined;
@@ -36,6 +42,8 @@ type Args = {
 type Table = {
   findMany: (args?: Args) => Promise<Row[]>;
   findFirst: (args?: Args) => Promise<Row | null>;
+  /** How many rows a `where` matches, which is a different question from a page. */
+  count: (args?: { where?: Condition }) => Promise<number>;
   create: (args: { data: Row }) => Promise<Row>;
   update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
   delete: (args: { where: { id: string } }) => Promise<Row>;
@@ -49,6 +57,7 @@ type Store = {
   medicationOrder: Table;
   medication: Table;
   patient: Pick<Table, "findFirst">;
+  archiveRestoreEvent: EventTable;
 };
 
 type Collections = {
@@ -63,6 +72,7 @@ type Collections = {
   clinicalNotes: Row[];
   diagnoses: Row[];
   procedures: Row[];
+  archiveRestoreEvents: Row[];
 };
 
 export type VisitTable = {
@@ -84,8 +94,12 @@ export type VisitTable = {
   patients: Row[];
   users: Row[];
   medications: Row[];
+  /** The archive/restore events written, in the order they were appended. */
+  events: Row[];
   /** Ids a caller tried to delete. The visit surface must never fill this. */
   destroyed: string[];
+  /** Collections a transaction changed without going through it. */
+  leakedWrites: string[];
   findVisit: (id: string) => Row | undefined;
   findVitals: (id: string) => Row | undefined;
   findLabOrder: (id: string) => Row | undefined;
@@ -153,8 +167,11 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
     clinicalNotes: rows(seed.clinicalNotes),
     diagnoses: rows(seed.diagnoses),
     procedures: rows(seed.procedures),
+    archiveRestoreEvents: rows(seed.archiveRestoreEvents),
   };
   const destroyed: string[] = [];
+  /** Collections a transaction changed without going through it. */
+  const leakedWrites: string[] = [];
 
   const table = (name: keyof typeof VISIT_CHILDREN, defaults?: Row) =>
     makeTable(
@@ -184,30 +201,63 @@ export function createVisitTable(seed: Partial<Collections> = {}): VisitTable {
         return found ? hydrate(found, { include: undefined, select }) : null;
       },
     },
+    archiveRestoreEvent: makeEventTable(collections.archiveRestoreEvents),
   };
 
   return {
     prisma: {
       ...store,
-      $transaction: async (run) => {
+      $transaction: async <T>(run: (tx: Store) => Promise<T>): Promise<T> => {
         const before = snapshot(collections);
+        const vended = new Set<string>();
+        // The transaction vends its own delegates, so a write that reached the
+        // pool instead can be told apart from one the transaction can undo. Both
+        // write to the same in-memory rows, so without this the double would
+        // happily report a rolled-back archive as undone either way.
+        const tx = new Proxy(store, {
+          get: (target, key: string) => {
+            if (key in DELEGATE_COLLECTIONS) vended.add(key);
+
+            return target[key as keyof Store];
+          },
+        });
+
+        const recordLeaks = () => {
+          for (const [delegate, collection] of Object.entries(
+            DELEGATE_COLLECTIONS,
+          )) {
+            if (vended.has(delegate)) continue;
+            if (!changed(collections, before, collection)) continue;
+
+            leakedWrites.push(collection);
+          }
+        };
 
         try {
-          return await run(store);
+          const written = await run(tx);
+
+          recordLeaks();
+
+          return written;
         } catch (error) {
+          // Asked for before the undo, or the undo hides the very write this
+          // is here to notice.
+          recordLeaks();
           restore(collections, before);
           throw error;
         }
       },
     },
     ...collections,
+    events: collections.archiveRestoreEvents,
     destroyed,
-    findVisit: (id) => collections.visits.find((row) => row.id === id),
-    findVitals: (id) => collections.vitals.find((row) => row.id === id),
-    findLabOrder: (id) => collections.labOrders.find((row) => row.id === id),
-    findImagingOrder: (id) =>
+    leakedWrites,
+    findVisit: (id: string) => collections.visits.find((row) => row.id === id),
+    findVitals: (id: string) => collections.vitals.find((row) => row.id === id),
+    findLabOrder: (id: string) => collections.labOrders.find((row) => row.id === id),
+    findImagingOrder: (id: string) =>
       collections.imagingOrders.find((row) => row.id === id),
-    findMedOrder: (id) => collections.medOrders.find((row) => row.id === id),
+    findMedOrder: (id: string) => collections.medOrders.find((row) => row.id === id),
   };
 }
 
@@ -246,6 +296,9 @@ function makeTable(
         ? hydrate(found, { select, include, collections: collections() })
         : null;
     },
+    count: async ({ where } = {}) =>
+      stored.filter((row) => matches(withRecords(row, collections()), where))
+        .length,
     create: async ({ data }) => {
       const created: Row = {
         id: `${idPrefix}-${nextSerial(stored, idPrefix)}`,
@@ -290,6 +343,18 @@ function rows(seed: Row[] | undefined): Row[] {
   return (seed ?? []).map((row) => ({ ...row }));
 }
 
+/** Which in-memory collection each Prisma delegate stands for. */
+const DELEGATE_COLLECTIONS = {
+  visit: "visits",
+  vitals: "vitals",
+  labOrder: "labOrders",
+  imagingOrder: "imagingOrders",
+  medicationOrder: "medOrders",
+  medication: "medications",
+  patient: "patients",
+  archiveRestoreEvent: "archiveRestoreEvents",
+} as const satisfies Record<string, keyof Collections>;
+
 function snapshot(collections: Collections): Row[][] {
   return Object.values(collections).map((stored) =>
     stored.map((row) => ({ ...row })),
@@ -300,8 +365,25 @@ function restore(collections: Collections, before: Row[][]): void {
   const names = Object.keys(collections) as (keyof Collections)[];
 
   names.forEach((name, index) => {
-    collections[name].splice(0, collections[name].length, ...before[index]);
+    const target = collections[name] as Row[];
+    target.splice(0, target.length, ...(before[index] as Row[]));
   });
+}
+
+/** Whether a collection holds anything other than what the snapshot recorded. */
+function changed(
+  collections: Collections,
+  before: Row[][],
+  collection: keyof Collections,
+): boolean {
+  const was = before[Object.keys(collections).indexOf(collection)] ?? [];
+  const now = collections[collection] as Row[];
+
+  if (was.length !== now.length) return true;
+
+  return was.some(
+    (row, index) => JSON.stringify(row) !== JSON.stringify(now[index]),
+  );
 }
 
 /**
@@ -352,10 +434,19 @@ function hydrate(
 
     if (!relation) continue;
 
-    hydrated[name] =
-      collections?.[relation.collection].find(
-        (candidate) => candidate.id === row[relation.column],
-      ) ?? null;
+    const related = collections?.[relation.collection].find(
+      (candidate) => candidate.id === row[relation.column],
+    );
+
+    // A relation asked for with its own query resolves through that query, so a
+    // read that includes the patient of the visit it includes is answered with
+    // the same patient the database would join.
+    hydrated[name] = related
+      ? hydrate(related, {
+          ...(typeof query === "object" ? query : {}),
+          collections,
+        })
+      : null;
   }
 
   return hydrated;
@@ -385,7 +476,9 @@ function sort(
   rows: Row[],
   orderBy: Record<string, "asc" | "desc"> | undefined,
 ) {
-  for (const [field, direction] of Object.entries(orderBy ?? {})) {
+  // Applied from the least significant key, because each `sort` is stable: the
+  // first key named has to be the one that decides, the way SQL orders by it.
+  for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
     rows.sort((left, right) => compare(left[field], right[field], direction));
   }
 }
@@ -428,6 +521,9 @@ function matchesField(value: unknown, condition: unknown): boolean {
     if (condition.in !== undefined) {
       return (condition.in as unknown[]).includes(value);
     }
+    // `not: null` is how a read asks for the archived rows, the mirror of every
+    // active rule in the clinical reads.
+    if (condition.not !== undefined) return value !== condition.not;
     // A condition over a joined record, such as the archived patient a visit
     // would otherwise inherit.
     if (isRecord(value) && !hasOperator(condition)) {
@@ -466,14 +562,35 @@ function compareDates(value: unknown, bound: unknown): number {
   return left === right ? 0 : left < right ? -1 : 1;
 }
 
+/**
+ * Orders two values the way the database orders them.
+ *
+ * Dates and instants compare as moments, and anything else compares as text — an id
+ * is ordered as text, which is what the id tie-break in an archive list relies on.
+ * Treating an id as a date would make every id the same value and leave the rows in
+ * whatever order they were stored in, which is the one thing a tie-break exists to
+ * prevent.
+ */
 function compare(
   left: unknown,
   right: unknown,
   direction: "asc" | "desc",
 ): number {
-  const order = compareDates(left, right);
+  const order =
+    left instanceof Date || right instanceof Date
+      ? compareDates(left, right)
+      : compareText(left, right);
 
   return direction === "desc" ? -order : order;
+}
+
+function compareText(left: unknown, right: unknown): number {
+  const leftText = String(left);
+  const rightText = String(right);
+
+  if (leftText === rightText) return 0;
+
+  return leftText < rightText ? -1 : 1;
 }
 
 function time(value: unknown): number {

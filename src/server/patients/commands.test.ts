@@ -8,14 +8,15 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createPatientTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   createPatient,
-  deletePatient,
+  archivePatient,
+  restorePatient,
   updatePatient,
   type PatientInput,
 } from "@/server/patients/commands";
@@ -64,12 +65,24 @@ const archivedAda = {
 
 const SESSION = {
   session: { id: "session-1", userId: "user-1" },
-  user: { id: "user-1", email: "doctor@clinic.test" },
+  user: {
+    id: "user-1",
+    email: "doctor@clinic.test",
+    role: "DOCTOR",
+    isActive: true,
+  },
 };
 
 const seed = (...patients: Record<string, unknown>[]) => {
-  table.rows.splice(0, table.rows.length, ...patients);
+  // Copied, because a write in one test would otherwise leave the shared fixture
+  // archived for the next test that seeds it.
+  table.rows.splice(
+    0,
+    table.rows.length,
+    ...patients.map((patient) => ({ ...patient }))
+  );
   table.destroyed.splice(0, table.destroyed.length);
+  table.events.splice(0, table.events.length);
 };
 
 const findByEmail = (email: string) =>
@@ -87,6 +100,20 @@ const notFound = {
   ok: false,
   error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
 };
+
+const forbidden = {
+  ok: false,
+  error: {
+    code: FAILURE_CODES.FORBIDDEN,
+    message: FAILURE_MESSAGES.FORBIDDEN,
+  },
+};
+
+/** The signed-in clinician, holding a different role. */
+const sessionFor = (role: string) => ({
+  ...SESSION,
+  user: { ...SESSION.user, role },
+});
 
 const emailTaken = {
   ok: false,
@@ -112,7 +139,7 @@ describe("patient write commands", () => {
     const results = await Promise.all([
       createPatient({ ...INPUT, email: "new@clinic.test" }),
       updatePatient("patient-1", INPUT),
-      deletePatient("patient-1"),
+      archivePatient("patient-1"),
     ]);
 
     for (const result of results) {
@@ -121,6 +148,24 @@ describe("patient write commands", () => {
 
     expect(table.rows).toHaveLength(2);
     expect(table.rows[0]).toEqual(ada);
+  });
+
+  it("refuses a write and an archive to an account that holds neither permission", async () => {
+    getSession.mockResolvedValue(sessionFor("LAB_TECHNICIAN"));
+
+    await expect(createPatient(INPUT)).resolves.toEqual(forbidden);
+    await expect(updatePatient("patient-1", INPUT)).resolves.toEqual(forbidden);
+    await expect(archivePatient("patient-1")).resolves.toEqual(forbidden);
+
+    expect(table.rows[0]).toEqual(ada);
+  });
+
+  it("refuses a restore to anyone but an administrator", async () => {
+    getSession.mockResolvedValue(sessionFor("DOCTOR"));
+
+    await expect(restorePatient("patient-2")).resolves.toEqual(forbidden);
+
+    expect(table.rows[1]).toEqual(archivedAda);
   });
 
   describe("create", () => {
@@ -143,6 +188,14 @@ describe("patient write commands", () => {
       });
       expect(created?.id).toEqual(expect.any(String));
       expect(created?.patientCode).toEqual(expect.any(String));
+    });
+
+    it("names the clinician who registered the patient", async () => {
+      await createPatient({ ...INPUT, email: "grace@clinic.test" });
+
+      expect(findByEmail("grace@clinic.test")).toMatchObject({
+        createdById: "user-1",
+      });
     });
 
     it("reads back through the patient reads", async () => {
@@ -245,11 +298,19 @@ describe("patient write commands", () => {
         updatePatient("patient-1", { ...INPUT, phone: "555-0100" })
       ).resolves.toEqual({ ok: true, data: { id: "patient-1" } });
     });
+
+    it("names the clinician who edited the patient", async () => {
+      getSession.mockResolvedValue(sessionFor("RECEPTIONIST"));
+
+      await updatePatient("patient-1", { ...INPUT, phone: "555-0100" });
+
+      expect(table.find("patient-1")).toMatchObject({ updatedById: "user-1" });
+    });
   });
 
-  describe("delete", () => {
+  describe("archive", () => {
     it("archives the patient instead of destroying it", async () => {
-      const result = await deletePatient("patient-1");
+      const result = await archivePatient("patient-1");
 
       expect(result.ok).toBe(true);
       expect(table.destroyed).toEqual([]);
@@ -263,7 +324,7 @@ describe("patient write commands", () => {
     });
 
     it("keeps the patient identity reserved after archiving", async () => {
-      await deletePatient("patient-1");
+      await archivePatient("patient-1");
 
       const result = await createPatient({
         ...INPUT,
@@ -281,7 +342,7 @@ describe("patient write commands", () => {
     });
 
     it("is idempotent for an already archived patient", async () => {
-      const result = await deletePatient(archivedAda.id);
+      const result = await archivePatient(archivedAda.id);
 
       expect(result).toEqual({
         ok: true,
@@ -293,9 +354,118 @@ describe("patient write commands", () => {
       expect(table.find(archivedAda.id)).toEqual(archivedAda);
     });
 
+    it("records the archive as an event, with the actor and the instant", async () => {
+      const result = await archivePatient("patient-1");
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "ARCHIVE",
+          recordType: "Patient",
+          recordId: "patient-1",
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { archivedAt: string } }).data.archivedAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("writes no event for a retried archive, because nothing changed", async () => {
+      await archivePatient(archivedAda.id);
+
+      expect(table.events).toEqual([]);
+    });
+
+    it("cannot archive without the event: a failed event rolls the archive back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(archivePatient("patient-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.find("patient-1")?.deletedAt).toBeNull();
+    });
+
     it("reports an unknown patient as not found", async () => {
-      await expect(deletePatient("patient-404")).resolves.toEqual(notFound);
+      await expect(archivePatient("patient-404")).resolves.toEqual(notFound);
       expect(table.destroyed).toEqual([]);
+    });
+  });
+
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+    });
+
+    it("brings an archived patient back into the reads", async () => {
+      const result = await restorePatient(archivedAda.id);
+
+      expect(result.ok).toBe(true);
+      expect(table.find(archivedAda.id)?.deletedAt).toBeNull();
+      await expect(getPatientDetail(archivedAda.id)).resolves.toMatchObject({
+        id: archivedAda.id,
+      });
+    });
+
+    it("is idempotent for a patient who is already active", async () => {
+      const result = await restorePatient(ada.id);
+
+      expect(result).toEqual({ ok: true, data: { id: ada.id, restoredAt: null } });
+      expect(table.find(ada.id)?.deletedAt).toBeNull();
+    });
+
+    it("records the restore as an event, with the actor and the instant", async () => {
+      const result = await restorePatient(archivedAda.id);
+
+      expect(table.events).toEqual([
+        expect.objectContaining({
+          action: "RESTORE",
+          recordType: "Patient",
+          recordId: archivedAda.id,
+          actorId: "user-1",
+          occurredAt: new Date(
+            (result as { data: { restoredAt: string } }).data.restoredAt,
+          ),
+        }),
+      ]);
+    });
+
+    it("keeps both events of an archive and its restore", async () => {
+      await archivePatient("patient-1");
+
+      getSession.mockResolvedValue(sessionFor("ADMIN"));
+      await restorePatient("patient-1");
+
+      expect(table.events.map((event) => event.action)).toEqual([
+        "ARCHIVE",
+        "RESTORE",
+      ]);
+    });
+
+    it("cannot restore without the event: a failed event rolls the restore back", async () => {
+      vi.spyOn(table.prisma.archiveRestoreEvent, "create").mockRejectedValue(
+        new Error("connection reset"),
+      );
+
+      await expect(restorePatient(archivedAda.id)).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FAILURE,
+          message: FAILURE_MESSAGES.FAILURE,
+        },
+      });
+      expect(table.find(archivedAda.id)?.deletedAt).toEqual(
+        archivedAda.deletedAt,
+      );
+    });
+
+    it("reports an unknown patient as not found", async () => {
+      await expect(restorePatient("patient-404")).resolves.toEqual(notFound);
     });
   });
 });

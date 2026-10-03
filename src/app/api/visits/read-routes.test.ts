@@ -9,8 +9,8 @@ const { table, getSession } = await vi.hoisted(async () => {
   return { table: createVisitTable(), getSession: vi.fn() };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import * as detailRoute from "@/app/api/visits/[id]/route";
@@ -19,7 +19,7 @@ import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
   SESSION,
   hoursFromStartOfToday,
-  localDay,
+  clinicToday,
   seedVisits,
   visit,
 } from "@/server/visits/test-support/seed";
@@ -60,7 +60,7 @@ describe("visit read routes", () => {
 
   describe("list", () => {
     it("answers the day's window with summary DTOs", async () => {
-      const today = localDay(new Date());
+      const today = clinicToday();
       const response = await visitRoute.GET(
         listRequest(`?from=${today}&to=${today}`),
       );
@@ -136,6 +136,40 @@ describe("visit read routes", () => {
 
       expect(response.status).toBe(401);
       await expect(response.json()).resolves.toEqual(UNAUTHENTICATED_BODY);
+    });
+  });
+
+  describe("roles", () => {
+    it("answers every visit read with forbidden for an account that holds no visit permission", async () => {
+      getSession.mockResolvedValue({ ...SESSION, user: { ...SESSION.user, role: "PATIENT" } });
+
+      const responses = [
+        await visitRoute.GET(listRequest()),
+        await detailRequest("visit-1"),
+      ];
+
+      for (const response of responses) {
+        expect(response.status).toBe(403);
+        await expect(response.json()).resolves.toEqual({
+          error: {
+            code: FAILURE_CODES.FORBIDDEN,
+            message: FAILURE_MESSAGES.FORBIDDEN,
+          },
+        });
+      }
+    });
+
+    it("keeps the visit a check-in opens readable for the role that checks in", async () => {
+      getSession.mockResolvedValue({
+        ...SESSION,
+        user: { ...SESSION.user, role: "RECEPTIONIST" },
+      });
+
+      // A check-in ends in the visit it opened, so the front desk has to be able
+      // to read the visit its own check-in sends it to.
+      await expect(detailRequest("visit-1")).resolves.toMatchObject({
+        status: 200,
+      });
     });
   });
 });

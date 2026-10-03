@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clinicDateTimeSchema, clinicTimeZone } from "@/lib/clinic-time";
 
 /**
  * The appointment form contract. A submitted form owns every field it renders,
@@ -26,9 +27,12 @@ const optionalText = z
   .preprocess(emptyToNull, z.string().trim().min(1).nullish())
   .transform((value) => value ?? null);
 
+/** A moment a clinician typed, resolved in the clinic's own time zone. */
+const clinicDateTime = clinicDateTimeSchema(clinicTimeZone);
+
 const appointmentFields = {
-  startDateTime: z.coerce.date(),
-  endDateTime: z.coerce.date(),
+  startDateTime: clinicDateTime,
+  endDateTime: clinicDateTime,
   appointmentType: z.enum([
     "ADMISSION",
     "CLINIC",

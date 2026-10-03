@@ -1,18 +1,8 @@
 "use client";
-import {
-  // AudioWaveform,
-  CalendarDays,
-  // Command,
-  Fullscreen,
-  // GalleryVerticalEnd,
-  Microscope,
-  Pill,
-  Store,
-  User,
-} from "lucide-react";
-
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { navigationFor } from "@/components/navigation";
+import { usePermissions } from "@/components/permissions-provider";
 import type { SessionUser } from "@/lib/session";
 // import { NavProjects } from "@/components/nav-projects";
 // import { TeamSwitcher } from "@/components/team-switcher";
@@ -24,149 +14,19 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-const data = {
-  navMain: [
-    {
-      title: "Patients",
-      url: "/patients",
-      icon: User,
-      isActive: true,
-      items: [
-        {
-          title: "Add Patient",
-          url: "/patients/add",
-        },
-        {
-          title: "All Patients",
-          url: "/patients/all",
-        },
-        {
-          title: "Outpatients",
-          url: "/patients/outpatients",
-        },
-        {
-          title: "Admitted",
-          url: "/patients/admitted",
-        },
-        {
-          title: "Report",
-          url: "/patients/reports",
-        },
-      ],
-    },
-    {
-      title: "Appointments",
-      url: "#",
-      icon: CalendarDays,
-      isActive: true,
-      items: [
-        {
-          title: "Add Appointment",
-          url: "/appointments/add",
-        },
-        {
-          title: "All Appointments",
-          url: "/appointments/all",
-        },
-        {
-          title: "Appointments Calendar",
-          url: "/appointments/calendar",
-        },
-        {
-          title: "Report",
-          url: "/appointments/reports",
-        },
-      ],
-    },
-    {
-      title: "Laboratory",
-      url: "/lab",
-      icon: Microscope,
-      isActive: true,
-      items: [
-        {
-          title: "Requests",
-          url: "/lab/requests",
-        },
-        {
-          title: "Completed",
-          url: "/lab/completed",
-        },
-      ],
-    },
-    {
-      title: "Medication",
-      url: "/medication",
-      icon: Pill,
-      isActive: true,
-      items: [
-        {
-          title: "Requests",
-          url: "/medication/requests",
-        },
-        {
-          title: "Completed",
-          url: "/medication/completed",
-        },
-      ],
-    },
-    {
-      title: "Imaging",
-      url: "/imaging",
-      icon: Fullscreen,
-      isActive: true,
-      items: [
-        {
-          title: "Requests",
-          url: "/imaging/requests",
-        },
-        {
-          title: "Completed",
-          url: "/imaging/completed",
-        },
-      ],
-    },
-    {
-      title: "Inventory",
-      url: "#",
-      icon: Store,
-      isActive: true,
-      items: [
-        {
-          title: "Add Item",
-          url: "/inventory/items/add",
-        },
-        {
-          title: "All Items",
-          url: "/inventory/items",
-        },
-        {
-          title: "Add Request",
-          url: "/inventory/requests/add",
-        },
-        {
-          title: "All Requests",
-          url: "/inventory/requests",
-        },
-        {
-          title: "Received",
-          url: "/inventory/received",
-        },
-        {
-          title: "Report",
-          url: "/inventory/reports",
-        },
-      ],
-    },
-  ],
-};
-
 export function AppSidebar({
   user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: SessionUser
 }) {
+  /**
+   * The navigation this clinician may use, asked of the matrix the server handed
+   * down. Filtered here rather than in the layout so a screen under this sidebar
+   * asks the same question about its own controls.
+   */
+  const { can } = usePermissions();
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -175,7 +35,7 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navigationFor(can)} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

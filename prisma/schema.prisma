@@ -79,32 +79,37 @@ enum OrderStatus {
 // -------------------------------------------
 
 model User {
-  id                 String                     @id @default(cuid())
-  name               String
-  email              String                     @unique
-  emailVerified      Boolean
-  role               Role                       @default(USER)
-  isActive           Boolean                    @default(true)
-  image              String?
-  departmentId       String?
-  department         Department?                @relation(fields: [departmentId], references: [id])
-  visits             Visit[]
-  appointments       Appointment[]
-  authoredNotes      ClinicalNote[]
-  createdVisits      Visit[]                    @relation("CreatedBy")
-  updatedVisits      Visit[]                    @relation("UpdatedBy")
-  medAdministrations MedicationAdministration[]
-  Vitals             Vitals[]
-  Diagnosis          Diagnosis[]
-  MedicationOrder    MedicationOrder[]
-  LabOrder           LabOrder[]
-  ImagingOrder       ImagingOrder[]
-  Procedure          Procedure[]
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  deletedAt          DateTime?
-  sessions           Session[]
-  accounts           Account[]
+  id                  String                     @id @default(cuid())
+  name                String
+  email               String                     @unique
+  emailVerified       Boolean
+  role                Role                       @default(USER)
+  isActive            Boolean                    @default(true)
+  image               String?
+  departmentId        String?
+  department          Department?                @relation(fields: [departmentId], references: [id])
+  visits              Visit[]
+  appointments        Appointment[]
+  authoredNotes       ClinicalNote[]
+  createdVisits       Visit[]                    @relation("CreatedBy")
+  updatedVisits       Visit[]                    @relation("UpdatedBy")
+  createdPatients     Patient[]                  @relation("PatientCreatedBy")
+  updatedPatients     Patient[]                  @relation("PatientUpdatedBy")
+  createdAppointments Appointment[]              @relation("AppointmentCreatedBy")
+  updatedAppointments Appointment[]              @relation("AppointmentUpdatedBy")
+  medAdministrations  MedicationAdministration[]
+  Vitals              Vitals[]
+  Diagnosis           Diagnosis[]
+  MedicationOrder     MedicationOrder[]
+  LabOrder            LabOrder[]
+  ImagingOrder        ImagingOrder[]
+  Procedure           Procedure[]
+  archiveEvents       ArchiveRestoreEvent[]      @relation("ArchiveRestoreActor")
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  deletedAt           DateTime?
+  sessions            Session[]
+  accounts            Account[]
 
   @@index([email])
   @@map("user")
@@ -129,6 +134,10 @@ model Patient {
   referredBy   String?
   referredDate DateTime?
   patientType  PatientType   @default(OUTPATIENT)
+  createdById  String?
+  createdBy    User?         @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  updatedById  String?
+  updatedBy    User?         @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
   visits       Visit[]
   appointments Appointment[]
   createdAt    DateTime      @default(now())
@@ -162,8 +171,11 @@ model Visit {
   createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
   updatedById   String?
   updatedBy     User?             @relation("UpdatedBy", fields: [updatedById], references: [id])
+  // The check-in link lives here and only here: an appointment is opened by the
+  // visit that holds its id. The mirror that used to sit on `Appointment` was
+  // never written, so it could silently disagree with this one.
   appointmentId String?           @unique
-  appointment   Appointment?
+  appointment   Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   visitType     VisitType
   startDateTime DateTime          @default(now())
   endDateTime   DateTime?
@@ -188,8 +200,14 @@ model Appointment {
   patient           Patient           @relation(fields: [patientId], references: [id])
   providerId        String?
   provider          User?             @relation(fields: [providerId], references: [id])
-  appointmentId     String?           @unique
-  visit             Visit?            @relation(fields: [appointmentId], references: [id])
+  createdById       String?
+  createdBy         User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?             @relation("AppointmentUpdatedBy", fields: [updatedById], references: [id])
+  // The visit this appointment was checked into, if any. The id lives on the
+  // visit; this is only the other end of that relation, which is what Prisma
+  // needs to read it back.
+  visit             Visit?
   startDateTime     DateTime
   endDateTime       DateTime
   appointmentType   AppointmentType
@@ -212,7 +230,9 @@ model Vitals {
   recordedBy         User?     @relation(fields: [recordedById], references: [id])
   recordedAt         DateTime  @default(now())
   height             Int?
-  weight             Int?
+  // A weight is routinely fractional (70.5 kg); an Int column would round it, so
+  // the stored reading would not be the reading the clinician recorded.
+  weight             Float?
   systolicBP         Int?
   diastolicBP        Int?
   heartRate          Int?
@@ -440,4 +460,38 @@ model Verification {
   updatedAt  DateTime @default(now()) @updatedAt
 
   @@map("verification")
+}
+
+enum ArchiveEventAction {
+  ARCHIVE
+  RESTORE
+}
+
+/**
+ * The record types the log can hold, named as the domain names them rather than
+ * as the Prisma model does. An enum rather than free text because a log is only
+ * readable if every archive of a record lands under the same name: a typo stored
+ * as text would silently split one record's history in two.
+ */
+enum ArchiveRecordType {
+  Patient
+  Appointment
+  Visit
+  Vitals
+  LabOrder
+  ImagingOrder
+  MedicationOrder
+}
+
+model ArchiveRestoreEvent {
+  id         String             @id @default(cuid())
+  action     ArchiveEventAction
+  recordType ArchiveRecordType
+  recordId   String
+  actorId    String
+  actor      User               @relation("ArchiveRestoreActor", fields: [actorId], references: [id])
+  occurredAt DateTime           @default(now())
+
+  @@index([recordType, recordId, occurredAt])
+  @@index([actorId, occurredAt])
 }

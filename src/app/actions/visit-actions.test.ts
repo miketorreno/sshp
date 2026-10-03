@@ -12,22 +12,35 @@ const { table, getSession, revalidatePath } = await vi.hoisted(async () => {
   };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: table.prisma }));
-vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
+vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import {
   checkoutVisit,
   createVisit,
-  deleteVisit,
+  archiveVisit,
+  restoreVisit,
   updateVisit,
 } from "@/app/actions/visit-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
-import { SESSION, seedVisits, visit } from "@/server/visits/test-support/seed";
+import {
+  SESSION,
+  seedVisits,
+  visit,
+} from "@/server/visits/test-support/seed";
 
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
+
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
 
 function visitForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
@@ -69,7 +82,7 @@ describe("visit form commands", () => {
       signedOut,
     );
     await expect(checkoutVisit("visit-1")).resolves.toEqual(signedOut);
-    await expect(deleteVisit("visit-1")).resolves.toEqual(signedOut);
+    await expect(archiveVisit("visit-1")).resolves.toEqual(signedOut);
 
     expect(table.visits).toEqual([visit()]);
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -107,7 +120,7 @@ describe("visit form commands", () => {
         patientId: "patient-1",
         providerId: "user-1",
         createdById: "user-1",
-        startDateTime: new Date("2026-03-05T11:00:00"),
+        startDateTime: new Date("2026-03-05T11:00:00Z"),
         visitType: "FOLLOWUP",
       });
       expect(result.ok && result.data.id).toBe(created?.id);
@@ -134,7 +147,7 @@ describe("visit form commands", () => {
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")).toMatchObject({
-        startDateTime: new Date("2026-03-06T11:00:00"),
+        startDateTime: new Date("2026-03-06T11:00:00Z"),
         updatedById: "user-1",
         patientId: "patient-1",
       });
@@ -166,12 +179,58 @@ describe("visit form commands", () => {
 
   describe("archive", () => {
     it("archives the visit and reports it, so the client can invalidate", async () => {
-      const result = await deleteVisit("visit-1");
+      const result = await archiveVisit("visit-1");
 
       expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
       expect(table.findVisit("visit-1")?.deletedAt).toBeInstanceOf(Date);
       expect(table.destroyed).toEqual([]);
       expect(revalidatePath).toHaveBeenCalledWith("/visits/visit-1");
+    });
+  });
+  describe("restore", () => {
+    it("restores the visit and revalidates the day it returns to", async () => {
+      getSession.mockResolvedValue(ADMIN);
+      // A fresh row each time: a command restores the row it finds in place, so a
+      // shared fixture would come back already restored for the next case.
+      seed({ visits: [visit({ deletedAt: ARCHIVED_AT })] });
+
+      const result = await restoreVisit("visit-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "visit-1" } });
+      expect(table.findVisit("visit-1")?.deletedAt).toBeNull();
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/outpatients",
+        "/visits/visit-1",
+      ]);
+    });
+
+    it("refuses a clinician, who may archive a visit but not bring one back", async () => {
+      getSession.mockResolvedValue(ADMIN);
+      seed({ visits: [visit({ deletedAt: ARCHIVED_AT })] });
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restoreVisit("visit-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+      expect(table.findVisit("visit-1")?.deletedAt).toEqual(ARCHIVED_AT);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("reports a visit whose patient is still archived", async () => {
+      // The archive unwinds from the patient down, so this is the answer the archive
+      // screen leads with: restore the patient first.
+      getSession.mockResolvedValue(ADMIN);
+      seed({ visits: [visit({ patientId: "patient-2", deletedAt: ARCHIVED_AT })] });
+
+      await expect(restoreVisit("visit-1")).resolves.toEqual({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND, message: "Visit not found" },
+      });
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
   });
 });
