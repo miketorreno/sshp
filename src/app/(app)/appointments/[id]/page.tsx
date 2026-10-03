@@ -10,11 +10,17 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { checkInAppointment } from "@/app/actions/appointment-actions";
 import { useAppointmentDetail } from "@/client/appointments/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
   // The clinic's zone, read from the server-rendered tree: a client component
   // cannot read `process.env`, so it is handed down. See ADR 0004.
   const zone = useClinicTimeZone();
+
+  // Editing the appointment and checking the patient in from it are two
+  // capabilities, and a role may hold one without the other.
+  const { can } = usePermissions();
 
   const router = useRouter();
   const { id } = use(params);
@@ -151,25 +157,28 @@ const AppointmentPage = ({ params }: { params: Promise<{ id: string }> }) => {
             <Button type="button" onClick={() => router.back()} size={"sm"}>
               Back
             </Button>
-            <Link href={`/appointments/${appointment.id}/edit`}>
-              <Button type="button" size={"sm"}>
-                Edit Appointment
-              </Button>
-            </Link>
-            {appointment.checkedIn ? (
-              <Button type="button" size={"sm"} disabled>
-                Already checked in
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size={"sm"}
-                onClick={checkIn}
-                disabled={isCheckingIn}
-              >
-                {isCheckingIn ? "Checking in..." : "Check In"}
-              </Button>
+            {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+              <Link href={`/appointments/${appointment.id}/edit`}>
+                <Button type="button" size={"sm"}>
+                  Edit Appointment
+                </Button>
+              </Link>
             )}
+            {can(PERMISSIONS.APPOINTMENTS_CHECK_IN) &&
+              (appointment.checkedIn ? (
+                <Button type="button" size={"sm"} disabled>
+                  Already checked in
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size={"sm"}
+                  onClick={checkIn}
+                  disabled={isCheckingIn}
+                >
+                  {isCheckingIn ? "Checking in..." : "Check In"}
+                </Button>
+              ))}
           </div>
         </CardContent>
       </Card>

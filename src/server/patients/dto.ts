@@ -3,6 +3,8 @@
  * data: ISO date strings instead of `Date` objects, no database bookkeeping.
  */
 
+import type { RestoreBlockedBy } from "@/server/archive/contract";
+import { toArchivedAt } from "@/server/archive/dto";
 import type { Patient } from "@/generated/prisma";
 
 export type PatientSummaryDto = {
@@ -51,6 +53,45 @@ export type PatientListDto = {
   pageSize: number;
   totalCount: number;
 };
+
+/**
+ * An archived patient, as the archive lists it.
+ *
+ * Enough to recognise the record and say when it left, rather than everything
+ * `PatientSummaryDto` carries: the archive answers "which patient, and can I
+ * bring them back", not "show me this patient again".
+ */
+export type ArchivedPatientDto = {
+  id: string;
+  patientCode: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  patientType: string;
+  /** When the patient was archived, as an instant the browser can read. */
+  archivedAt: string;
+  /**
+   * Nothing stands above a patient, so this is always null. It is here because the
+   * archive renders one Restore column for every section, and a section that has no
+   * ancestor to name says so the same way a clear one does.
+   */
+  restoreBlockedBy: RestoreBlockedBy | null;
+};
+
+export function toArchivedPatient(patient: Patient): ArchivedPatientDto {
+  return {
+    id: patient.id,
+    patientCode: patient.patientCode,
+    firstName: patient.firstName,
+    lastName: patient.lastName,
+    dateOfBirth: toIso(patient.dateOfBirth),
+    gender: patient.gender,
+    patientType: patient.patientType,
+    archivedAt: toArchivedAt(patient.deletedAt),
+    restoreBlockedBy: null,
+  };
+}
 
 export function toPatientSummary(patient: Patient): PatientSummaryDto {
   return {

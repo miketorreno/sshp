@@ -12,11 +12,13 @@ vi.mock("@/lib/prisma", () => ({ getPrisma: () => table.prisma }));
 vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
-import { UnauthenticatedError } from "@/lib/session";
+import { ForbiddenError, UnauthenticatedError } from "@/lib/session";
+import { MAX_ARCHIVE_LIMIT } from "@/server/archive/contract";
 import { MAX_LIST_LIMIT } from "@/server/patients/contract";
 import {
   getPatientDetail,
   listAdmittedPatients,
+  listArchivedPatients,
   listPatientHistory,
   listPatients,
 } from "@/server/patients/reads";
@@ -77,8 +79,43 @@ const alan = {
   createdAt: new Date("2025-12-31T03:04:05.000Z"),
 };
 
+const katherine = {
+  ...ada,
+  id: "patient-4",
+  patientCode: "PAT-004",
+  firstName: "Katherine",
+  middleName: "Coleman",
+  lastName: "Johnson",
+  email: "katherine@clinic.test",
+  createdAt: new Date("2025-12-30T03:04:05.000Z"),
+  deletedAt: new Date("2026-03-05T09:00:00.000Z"),
+};
+
+const edsger = {
+  ...ada,
+  id: "patient-5",
+  patientCode: "PAT-005",
+  firstName: "Edsger",
+  middleName: "Gerrit",
+  lastName: "Dijkstra",
+  email: "edsger@clinic.test",
+  createdAt: new Date("2025-12-29T03:04:05.000Z"),
+  // The same instant as Katherine's. Two patients archived in one transaction
+  // share a `deletedAt`, so the id tie-break is what keeps the pages disjoint, and
+  // it lists the higher id first.
+  deletedAt: new Date("2026-03-05T09:00:00.000Z"),
+};
+
 const seed = () => {
-  table.rows.splice(0, table.rows.length, ada, grace, alan);
+  table.rows.splice(
+    0,
+    table.rows.length,
+    ada,
+    grace,
+    alan,
+    katherine,
+    edsger,
+  );
   table.events.splice(0, table.events.length);
 };
 
@@ -99,6 +136,9 @@ describe("patient reads", () => {
       UnauthenticatedError,
     );
     await expect(listPatientHistory("patient-1")).rejects.toBeInstanceOf(
+      UnauthenticatedError,
+    );
+    await expect(listArchivedPatients()).rejects.toBeInstanceOf(
       UnauthenticatedError,
     );
   });
@@ -331,6 +371,88 @@ describe("patient reads", () => {
       await expect(listPatientHistory("patient-1")).resolves.toMatchObject([
         { id: "archive-event-1", action: "ARCHIVE" },
         { id: "archive-event-2", action: "RESTORE" },
+      ]);
+    });
+  });
+  describe("archive", () => {
+    it("refuses a session that cannot archive", async () => {
+      // Reading the history is not reading the patient, so this sits behind
+      // `patients:archive` rather than behind the `patients:read` the patient list
+      // uses. The doctor session holds both, which is why this needs a session that
+      // holds neither.
+      getSession.mockResolvedValue({
+        ...SESSION,
+        user: { ...SESSION.user, role: "USER" },
+      });
+
+      await expect(listArchivedPatients()).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
+    });
+
+    it("returns the archived patients and nothing else", async () => {
+      const page = await listArchivedPatients();
+
+      // Edsger before Katherine: the same archive moment, so the id decides, and it
+      // decides the same way on every read.
+      expect(page.rows.map((patient) => patient.id)).toEqual([
+        "patient-5",
+        "patient-4",
+        "patient-3",
+      ]);
+      expect(page.rows[0]).toEqual({
+        id: "patient-5",
+        patientCode: "PAT-005",
+        firstName: "Edsger",
+        lastName: "Dijkstra",
+        dateOfBirth: "1815-12-10T00:00:00.000Z",
+        gender: "Female",
+        patientType: "OUTPATIENT",
+        archivedAt: "2026-03-05T09:00:00.000Z",
+        restoreBlockedBy: null,
+      });
+    });
+
+    it("keeps two patients archived in the same instant in a fixed order", async () => {
+      // Katherine and Edsger share a `deletedAt`, so without the id tie-break page
+      // two could repeat a row from page one and drop another.
+      const first = await listArchivedPatients({ limit: 1 });
+      const second = await listArchivedPatients({ limit: 1, page: 2 });
+
+      expect(first.rows.map((patient) => patient.id)).toEqual(["patient-5"]);
+      expect(second.rows.map((patient) => patient.id)).toEqual(["patient-4"]);
+      expect(second.totalCount).toBe(3);
+    });
+
+    it("reports the page it served, and answers a page past the end as empty", async () => {
+      await expect(listArchivedPatients({ page: 2, limit: 2 })).resolves.toEqual({
+        rows: [expect.objectContaining({ id: "patient-3" })],
+        page: 2,
+        pageSize: 2,
+        totalCount: 3,
+      });
+      await expect(
+        listArchivedPatients({ page: 9, limit: 2 }),
+      ).resolves.toMatchObject({ rows: [], page: 9 });
+    });
+
+    it("clamps paging to bounds a client cannot escape", async () => {
+      const page = await listArchivedPatients({ page: 0, limit: 5000 });
+
+      expect(page.rows).toHaveLength(3);
+      expect(page.page).toBe(1);
+      expect(page.pageSize).toBe(MAX_ARCHIVE_LIMIT);
+    });
+
+    it("says a patient can be restored, because nothing stands above one", async () => {
+      // Every other section can name a record that has to be restored first. A
+      // patient cannot, and the screen reads the same field either way.
+      const { rows } = await listArchivedPatients();
+
+      expect(rows.map((patient) => patient.restoreBlockedBy)).toEqual([
+        null,
+        null,
+        null,
       ]);
     });
   });

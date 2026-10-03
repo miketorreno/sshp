@@ -25,6 +25,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { calculateAge } from "@/lib/clinic-time";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 import {
   invalidatePatientWrites,
   usePatientList,
@@ -47,6 +49,11 @@ const AllPatientsPage = () => {
   // The clinic's zone, read from the server-rendered tree: a client component
   // cannot read `process.env`, so it is handed down. See ADR 0004.
   const zone = useClinicTimeZone();
+
+  // What this clinician may do with a patient, answered from the matrix the
+  // layout handed down. A menu item is here because the command behind it exists
+  // for this role, not because it was written for everyone.
+  const { can } = usePermissions();
 
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -202,21 +209,25 @@ const AllPatientsPage = () => {
                             >
                               View
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onClick={() =>
-                                router.push(`/patients/${patient.id}/edit`)
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600 cursor-pointer"
-                              disabled={isArchiving}
-                              onClick={() => archive(patient.id)}
-                            >
-                              Archive
-                            </DropdownMenuItem>
+                            {can(PERMISSIONS.PATIENTS_WRITE) && (
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onClick={() =>
+                                  router.push(`/patients/${patient.id}/edit`)
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {can(PERMISSIONS.PATIENTS_ARCHIVE) && (
+                              <DropdownMenuItem
+                                className="text-red-600 cursor-pointer"
+                                disabled={isArchiving}
+                                onClick={() => archive(patient.id)}
+                              >
+                                Archive
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

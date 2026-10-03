@@ -11,8 +11,10 @@ import { PATIENT_PAGES } from "@/server/patients/contract";
 import {
   createPatient as createPatientCommand,
   archivePatient as archivePatientCommand,
+  restorePatient as restorePatientCommand,
   updatePatient as updatePatientCommand,
   type PatientArchiveResult,
+  type PatientRestoreResult,
   type PatientWriteResult,
 } from "@/server/patients/commands";
 import {
@@ -76,6 +78,27 @@ export async function archivePatient(
   if (!result.ok) return result;
 
   revalidatePatientPages();
+
+  return result;
+}
+
+/**
+ * Reported rather than redirected: a patient is restored from the archive and from a
+ * row on the patient list, and both callers stay where they are and drop the row from
+ * their own reads.
+ *
+ * Only an administrator reaches this, and the refusal comes from the command, so a
+ * clinician who finds the button sees the same answer the boundary gives.
+ */
+export async function restorePatient(
+  patientId: string,
+): Promise<ActionResult<PatientRestoreResult>> {
+  const result = await restorePatientCommand(patientId);
+
+  if (!result.ok) return result;
+
+  revalidatePatientPages();
+  revalidatePath(patientPage(patientId));
 
   return result;
 }

@@ -7,9 +7,10 @@
  * is a permission a caller without the interface does not have: the reads and
  * writes are the boundary, so that is where the answer lives.
  *
- * The names are capabilities rather than roles, so adding a role is a row in the
- * matrix and adding a capability is a name here — never a new question asked
- * somewhere else.
+ * The capability names come from `src/server/permissions.ts`, which decides
+ * nothing and so can be bundled for a browser; this module reads the session, so
+ * it cannot be. They are re-exported here because a read or a write reaches for
+ * both from one module, and the boundary should not be two imports wide.
  */
 
 import { Role } from "@/generated/prisma";
@@ -22,39 +23,23 @@ import {
   unauthenticatedFailure,
   type Session,
 } from "@/lib/session";
+import { EVERY_PERMISSION, PERMISSIONS } from "@/server/permissions";
 
-export const PERMISSIONS = {
-  PATIENTS_READ: "patients:read",
-  PATIENTS_WRITE: "patients:write",
-  PATIENTS_ARCHIVE: "patients:archive",
-  PATIENTS_RESTORE: "patients:restore",
+export {
+  PERMISSIONS,
+  type Permission,
+} from "@/server/permissions";
 
-  APPOINTMENTS_READ: "appointments:read",
-  APPOINTMENTS_WRITE: "appointments:write",
-  APPOINTMENTS_ARCHIVE: "appointments:archive",
-  APPOINTMENTS_CHECK_IN: "appointments:checkIn",
-  APPOINTMENTS_RESTORE: "appointments:restore",
+import type { Permission } from "@/server/permissions";
 
-  VISITS_READ: "visits:read",
-  VISITS_WRITE: "visits:write",
-  VISITS_ARCHIVE: "visits:archive",
-  VISITS_RESTORE: "visits:restore",
-
-  VITALS_WRITE: "vitals:write",
-  VITALS_ARCHIVE: "vitals:archive",
-  VITALS_RESTORE: "vitals:restore",
-
-  ORDERS_WRITE: "orders:write",
-  ORDERS_ARCHIVE: "orders:archive",
-  ORDERS_RESTORE: "orders:restore",
-
-  MEDICATIONS_READ: "medications:read",
-  REPORTS_READ: "reports:read",
-} as const;
-
-export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
-
-const EVERY_PERMISSION: readonly Permission[] = Object.values(PERMISSIONS);
+/**
+ * The part of a session a permission is answered from: who the clinician is and
+ * whether the account is still on. Both the boundary and the screens ask from
+ * this, so the two cannot answer differently.
+ */
+export type SessionIdentity = {
+  user: { role: string | null; isActive: boolean };
+};
 
 /**
  * Reading the clinical record: the patients, the day's appointments, the visits
@@ -190,6 +175,26 @@ export function can(
 }
 
 /**
+ * What the signed-in clinician may do, as one list the screens ask of.
+ *
+ * The interface hides a control the boundary would refuse, and it may only hide
+ * what the boundary refuses, so both answers come from here: the screens are
+ * handed this list rather than a copy of the matrix, and a screen that hides
+ * nothing shows nothing a read or a write would refuse. No session holds nothing
+ * here exactly as it holds nothing at the boundary.
+ *
+ * A list of names rather than a function, because it crosses into the client
+ * tree and has to survive the trip.
+ */
+export function permissionsOf(
+  session: SessionIdentity | null,
+): Permission[] {
+  if (!session) return [];
+
+  return EVERY_PERMISSION.filter((permission) => may(session, permission));
+}
+
+/**
  * The session a read needs, or a throw. A read route has nothing to report a
  * refusal with but a status, so it refuses by throwing the failure the shared
  * envelope already knows how to answer.
@@ -228,7 +233,7 @@ export async function authorize(
  * than leaving the ones that happen to be listed. What an account can still sign
  * in to is not this question — the permissions are.
  */
-function may(session: Session, permission: Permission): boolean {
+function may(session: SessionIdentity, permission: Permission): boolean {
   return session.user.isActive === true && can(session.user.role, permission);
 }
 

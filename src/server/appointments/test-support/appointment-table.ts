@@ -10,8 +10,8 @@ import { makeEventTable } from "@/server/archive-events/test-support/event-table
  *
  * It understands only the query features the appointment module uses: equality,
  * case-insensitive `contains`, `not`, `in`, `AND`/`OR` groups, a to-one `is`
- * relation filter, the `gte`/`gt`/`lt` range and overlap of a window, `orderBy`,
- * `skip`, `take`,
+ * relation filter, the `gte`/`gt`/`lt` range and overlap of a window, `orderBy`
+ * by several keys, `skip`, `take`, `count`,
  * `select`, and `include` of the `patient` and `provider` relations. The visit that a
  * check-in links is read from the visit table, exactly as the database joins it,
  * so the double cannot answer a question the database would not.
@@ -38,8 +38,20 @@ type Table = {
   delete: (args: { where: { id: string } }) => Promise<Row>;
 };
 
+/**
+ * A table that can also be asked how many rows it has.
+ *
+ * Only the appointment table is: a list read reports the total beside its page so
+ * a pager knows whether a next page exists, and the archive's appointment list is
+ * the one that pages. `count` is a different question from a page of rows, so it
+ * is a separate method rather than a flag on `findMany`.
+ */
+type CountableTable = Table & {
+  count: (args?: { where?: Condition }) => Promise<number>;
+};
+
 type Store = {
-  appointment: Table;
+  appointment: CountableTable;
   visit: Table;
   patient: Pick<Table, "findFirst">;
   archiveRestoreEvent: Table;
@@ -90,7 +102,10 @@ export function createAppointmentTable(
           matches(withRelations(row, relations), where),
         );
 
-        for (const [field, direction] of Object.entries(orderBy ?? {})) {
+        // Applied from the least significant key, because each `sort` is stable:
+        // the first key named has to be the one that decides, the way SQL orders
+        // by it.
+        for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
           found.sort((left, right) =>
             compare(left[field], right[field], direction),
           );
@@ -107,6 +122,10 @@ export function createAppointmentTable(
 
         return found ? hydrateAppointment(found, include, relations) : null;
       },
+      count: async ({ where } = {}) =>
+        appointments.filter((row) =>
+          matches(withRelations(row, relations), where),
+        ).length,
       create: async ({ data }) => {
         const created: Row = {
           id: `appointment-${nextSerial(appointments, "appointment")}`,
@@ -150,7 +169,10 @@ export function createAppointmentTable(
       findMany: async ({ where, orderBy, skip = 0, take } = {}) => {
         const found = visits.filter((row) => matches(row, where));
 
-        for (const [field, direction] of Object.entries(orderBy ?? {})) {
+        // Applied from the least significant key, because each `sort` is stable:
+        // the first key named has to be the one that decides, the way SQL orders
+        // by it.
+        for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
           found.sort((left, right) =>
             compare(left[field], right[field], direction),
           );
@@ -431,16 +453,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+/**
+ * Orders two values the way the database orders them.
+ *
+ * Dates and instants compare as moments, and anything else compares as text — an id
+ * is ordered as text, which is what the id tie-break in an archive list relies on.
+ * Treating an id as a date would make every id the same value and leave the rows in
+ * whatever order they were stored in, which is the one thing a tie-break exists to
+ * prevent.
+ */
 function compare(
   left: unknown,
   right: unknown,
   direction: "asc" | "desc",
 ): number {
-  const leftTime = time(left);
-  const rightTime = time(right);
-  const order = leftTime === rightTime ? 0 : leftTime < rightTime ? -1 : 1;
+  const order =
+    left instanceof Date || right instanceof Date
+      ? compareTimes(left, right)
+      : compareText(left, right);
 
   return direction === "desc" ? -order : order;
+}
+
+/** Two instants, which is how the window and the archive order their columns. */
+function compareTimes(left: unknown, right: unknown): number {
+  const leftTime = time(left);
+  const rightTime = time(right);
+
+  return leftTime === rightTime ? 0 : leftTime < rightTime ? -1 : 1;
+}
+
+function compareText(left: unknown, right: unknown): number {
+  const leftText = String(left);
+  const rightText = String(right);
+
+  if (leftText === rightText) return 0;
+
+  return leftText < rightText ? -1 : 1;
 }
 
 function time(value: unknown): number {

@@ -1,5 +1,12 @@
 import { getPrisma } from "@/lib/prisma";
 import { PERMISSIONS, requirePermission } from "@/server/access";
+import type { ArchiveListQuery } from "@/server/archive/contract";
+import type { ArchivePage } from "@/server/archive/dto";
+import {
+  ARCHIVED_RECORD,
+  MOST_RECENTLY_ARCHIVED,
+  pageOf,
+} from "@/server/archive/reads";
 import {
   CHRONOLOGICAL,
   toArchiveEvent,
@@ -12,8 +19,10 @@ import {
   type AppointmentWindow,
 } from "./contract";
 import {
+  toArchivedAppointment,
   toAppointmentDetail,
   toAppointmentSummary,
+  type ArchivedAppointmentDto,
   type AppointmentDetailDto,
   type AppointmentSummaryDto,
   type AppointmentWithRelations,
@@ -24,6 +33,9 @@ import {
  * read hides archived records: an appointment is history once archived, and an
  * appointment whose patient is archived is inactive rather than active, so it
  * leaves the normal clinical screens too.
+ *
+ * The archive is the one exception, and it asks for `appointments:archive` instead:
+ * reading the history is not reading the appointment.
  */
 
 const ACTIVE_APPOINTMENT = {
@@ -58,6 +70,40 @@ export async function listAppointments(
   });
 
   return toSummaries(appointments);
+}
+
+/**
+ * One page of archived appointments, most recently archived first.
+ *
+ * Only `deletedAt` is asked about, where the active list also insists on an active
+ * patient. That is the difference between the two lists: an appointment whose
+ * patient is archived is invisible on the calendar, and this is where a reader goes
+ * to find it.
+ */
+export async function listArchivedAppointments(
+  query: ArchiveListQuery = {},
+): Promise<ArchivePage<ArchivedAppointmentDto>> {
+  await requirePermission(PERMISSIONS.APPOINTMENTS_ARCHIVE);
+
+  const { page, pageSize, skip, take } = pageOf(query);
+
+  const [appointments, totalCount] = await Promise.all([
+    getPrisma().appointment.findMany({
+      where: ARCHIVED_RECORD,
+      include: { patient: true },
+      orderBy: MOST_RECENTLY_ARCHIVED,
+      skip,
+      take,
+    }),
+    getPrisma().appointment.count({ where: ARCHIVED_RECORD }),
+  ]);
+
+  return {
+    rows: appointments.map(toArchivedAppointment),
+    page,
+    pageSize,
+    totalCount,
+  };
 }
 
 /**

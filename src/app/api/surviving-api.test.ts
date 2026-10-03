@@ -11,6 +11,11 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/prisma", () => ({ getPrisma: () => {} }));
 
+import * as archiveAppointmentsRoute from "@/app/api/archive/appointments/route";
+import * as archiveOrdersRoute from "@/app/api/archive/orders/route";
+import * as archivePatientsRoute from "@/app/api/archive/patients/route";
+import * as archiveVisitsRoute from "@/app/api/archive/visits/route";
+import * as archiveVitalsRoute from "@/app/api/archive/vitals/route";
 import * as appointmentRoute from "@/app/api/appointments/route";
 import * as appointmentDetailRoute from "@/app/api/appointments/[id]/route";
 import * as authRoute from "@/app/api/auth/[...all]/route";
@@ -36,6 +41,14 @@ const BETTER_AUTH_CATCH_ALL = "auth/[...all]/route.ts";
 
 /** Every surviving domain read, as the path the browser calls it by. */
 const DOMAIN_READS: Record<string, Record<string, unknown>> = {
+  // The five archive sections. One route each, because each answers for a different
+  // permission: a doctor archives visits but not nothing, and a section behind the
+  // wrong permission would list records the reader may not bring back.
+  "archive/appointments/route.ts": archiveAppointmentsRoute,
+  "archive/orders/route.ts": archiveOrdersRoute,
+  "archive/patients/route.ts": archivePatientsRoute,
+  "archive/visits/route.ts": archiveVisitsRoute,
+  "archive/vitals/route.ts": archiveVitalsRoute,
   "appointments/route.ts": appointmentRoute,
   "appointments/[id]/route.ts": appointmentDetailRoute,
   "medications/route.ts": medicationRoute,

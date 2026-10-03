@@ -2,9 +2,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import Header from "@/components/header";
 import QueryProvider from "@/components/QueryProvider";
 import { ClinicTimeZoneProvider } from "@/components/clinic-time-zone-provider";
+import { PermissionsProvider } from "@/components/permissions-provider";
 import { clinicTimeZone } from "@/lib/clinic-time";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getSession, type SessionUser } from "@/lib/session";
+import { permissionsOf } from "@/server/access";
 import { redirect } from "next/navigation";
 
 const AppLayout = async ({ children }: { children: React.ReactNode }) => {
@@ -22,24 +24,39 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
    */
   const clinicZone = clinicTimeZone();
 
+  /*
+   * And the same session, asked again for what this clinician may do. The
+   * boundary is where a permission is enforced; this is so the screens do not
+   * offer a control the boundary would refuse. Both answers come from the one
+   * matrix, so the two cannot disagree.
+   */
+  const permissions = permissionsOf(session);
+
   return (
     <SidebarProvider>
-      <AppSidebar user={{ name, email, image }} />
-      <SidebarInset>
-        <Header />
-        {/*
-         * The read cache is scoped to the session entitled to it, which is why it
-         * is mounted here and not in the root layout: signing out unmounts it, so
-         * the next clinician to use this terminal reads nothing from the last
-         * one's cache. Keyed on the session id for the same reason, since a
-         * replaced session is a new identity rather than a re-render.
-         */}
-        <QueryProvider key={session.session.id}>
-          <ClinicTimeZoneProvider zone={clinicZone}>
-            <div className="p-6 min-h-10/12">{children}</div>
-          </ClinicTimeZoneProvider>
-        </QueryProvider>
-      </SidebarInset>
+      {/*
+       * Wraps the sidebar and the screens together: the navigation is filtered by
+       * what the role holds, so it is asked the same question as the controls on
+       * the pages it leads to.
+       */}
+      <PermissionsProvider role={session.user.role} permissions={permissions}>
+        <AppSidebar user={{ name, email, image }} />
+        <SidebarInset>
+          <Header />
+          {/*
+           * The read cache is scoped to the session entitled to it, which is why it
+           * is mounted here and not in the root layout: signing out unmounts it, so
+           * the next clinician to use this terminal reads nothing from the last
+           * one's cache. Keyed on the session id for the same reason, since a
+           * replaced session is a new identity rather than a re-render.
+           */}
+          <QueryProvider key={session.session.id}>
+            <ClinicTimeZoneProvider zone={clinicZone}>
+              <div className="p-6 min-h-10/12">{children}</div>
+            </ClinicTimeZoneProvider>
+          </QueryProvider>
+        </SidebarInset>
+      </PermissionsProvider>
     </SidebarProvider>
   );
 };

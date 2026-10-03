@@ -1,5 +1,9 @@
 import type { AppointmentListQuery } from "@/server/appointments/contract";
 import type {
+  ArchiveListQuery,
+  ArchiveSectionKey,
+} from "@/server/archive/contract";
+import type {
   PatientListQuery,
   PatientReportPeriod,
 } from "@/server/patients/contract";
@@ -42,5 +46,16 @@ export const queryKeys = {
   },
   medications: {
     list: () => ["medications", "list"] as const,
+  },
+  /**
+   * The archive is one screen of five sections rather than five screens, but each
+   * section is its own read: a role may see patients without seeing orders, and each
+   * list is paged on its own. So the key names the section and its page, and the
+   * shared prefix covers the lot.
+   */
+  archive: {
+    section: (section: ArchiveSectionKey, query: ArchiveListQuery = {}) =>
+      ["archive", section, query] as const,
+    sections: () => ["archive"] as const,
   },
 } as const;

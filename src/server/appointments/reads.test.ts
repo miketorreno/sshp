@@ -13,9 +13,11 @@ vi.mock("@/lib/auth", () => ({ getAuth: () => ({ api: { getSession } }) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import { FAILURE_CODES } from "@/lib/action-result";
+import { MAX_ARCHIVE_LIMIT } from "@/server/archive/contract";
 import { DEFAULT_LIST_LIMIT } from "@/server/appointments/contract";
 import {
   getAppointmentDetail,
+  listArchivedAppointments,
   listAppointmentHistory,
   listAppointments,
   listAppointmentsInWindow,
@@ -560,6 +562,119 @@ describe("appointment reads", () => {
       await expect(listAppointmentHistory("appointment-404")).resolves.toEqual(
         [],
       );
+    });
+  });
+  describe("archive", () => {
+    const archivedAt = new Date("2026-04-01T08:00:00.000Z");
+
+    beforeEach(() => {
+      seed({
+        appointments: [
+          appointment(),
+          appointment({
+            id: "appointment-2",
+            patientId: "patient-2",
+            startDateTime: new Date("2026-03-03T09:00:00.000Z"),
+            endDateTime: new Date("2026-03-03T09:30:00.000Z"),
+            appointmentStatus: "CANCELLED",
+            reason: null,
+            deletedAt: archivedAt,
+          }),
+          appointment({
+            id: "appointment-3",
+            startDateTime: new Date("2026-03-04T09:00:00.000Z"),
+            endDateTime: new Date("2026-03-04T09:30:00.000Z"),
+            deletedAt: new Date("2026-04-02T08:00:00.000Z"),
+          }),
+        ],
+      });
+    });
+
+    it("refuses a session that cannot archive", async () => {
+      getSession.mockResolvedValue({
+        ...SESSION,
+        user: { ...SESSION.user, role: "USER" },
+      });
+
+      await expect(listArchivedAppointments()).rejects.toMatchObject({
+        name: "ForbiddenError",
+        failure: { code: FAILURE_CODES.FORBIDDEN },
+      });
+    });
+
+    it("returns the archived appointments, most recently archived first", async () => {
+      const page = await listArchivedAppointments();
+
+      expect(page).toEqual({
+        rows: [
+          {
+            id: "appointment-3",
+            startDateTime: "2026-03-04T09:00:00.000Z",
+            endDateTime: "2026-03-04T09:30:00.000Z",
+            appointmentType: "CLINIC",
+            appointmentStatus: "SCHEDULED",
+            reason: "Annual check",
+            patient: { id: "patient-1", name: "Ada Quincy Lovelace" },
+            archivedAt: "2026-04-02T08:00:00.000Z",
+            restoreBlockedBy: null,
+          },
+          {
+            id: "appointment-2",
+            startDateTime: "2026-03-03T09:00:00.000Z",
+            endDateTime: "2026-03-03T09:30:00.000Z",
+            appointmentType: "CLINIC",
+            appointmentStatus: "CANCELLED",
+            reason: null,
+            patient: { id: "patient-2", name: "Grace Quincy Lovelace" },
+            archivedAt: "2026-04-01T08:00:00.000Z",
+            restoreBlockedBy: {
+              recordType: "Patient",
+              id: "patient-2",
+              patientName: "Grace Quincy Lovelace",
+            },
+          },
+        ],
+        page: 1,
+        pageSize: 20,
+        totalCount: 2,
+      });
+    });
+
+    it("names the patient to restore first when the patient is archived too", async () => {
+      // The command refuses this restore: an appointment of an archived patient is
+      // not reachable by any read, so the archive unwinds from the patient down.
+      const { rows } = await listArchivedAppointments();
+
+      expect(rows[1].restoreBlockedBy).toEqual({
+        recordType: "Patient",
+        id: "patient-2",
+        patientName: "Grace Quincy Lovelace",
+      });
+    });
+
+    it("pages the archived appointments and counts every one of them", async () => {
+      await expect(
+        listArchivedAppointments({ limit: 1, page: 2 }),
+      ).resolves.toMatchObject({
+        rows: [expect.objectContaining({ id: "appointment-2" })],
+        page: 2,
+        pageSize: 1,
+        totalCount: 2,
+      });
+    });
+
+    it("clamps paging to bounds a client cannot escape", async () => {
+      const page = await listArchivedAppointments({ page: 0, limit: 5000 });
+
+      expect(page.page).toBe(1);
+      expect(page.pageSize).toBe(MAX_ARCHIVE_LIMIT);
+      expect(page.totalCount).toBe(2);
+    });
+
+    it("never offers an appointment that is still on the calendar", async () => {
+      const { rows } = await listArchivedAppointments();
+
+      expect(rows.map((row) => row.id)).not.toContain("appointment-1");
     });
   });
 });

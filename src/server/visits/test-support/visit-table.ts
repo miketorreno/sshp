@@ -7,10 +7,11 @@
  * module stays free to change how it asks the database.
  *
  * It understands only the query features the visit surface uses: equality, `in`,
- * date comparisons (`gte`, `lt`), `orderBy`, `skip`, `take`, `select`, and
- * `include` of a single record or a list of records, nested one level deep. A
- * record that belongs to another visit is joined the way the database joins it,
- * so the double cannot answer a question the database would not.
+ * `not`, date comparisons (`gte`, `lt`), `orderBy` by several keys, `skip`,
+ * `take`, `count`, `select`, and `include` of a single record or a list of
+ * records, nested. A record that belongs to another visit is joined the way the
+ * database joins it, so the double cannot answer a question the database would
+ * not.
  */
 
 import {
@@ -41,6 +42,8 @@ type Args = {
 type Table = {
   findMany: (args?: Args) => Promise<Row[]>;
   findFirst: (args?: Args) => Promise<Row | null>;
+  /** How many rows a `where` matches, which is a different question from a page. */
+  count: (args?: { where?: Condition }) => Promise<number>;
   create: (args: { data: Row }) => Promise<Row>;
   update: (args: { where: { id: string }; data: Row }) => Promise<Row>;
   delete: (args: { where: { id: string } }) => Promise<Row>;
@@ -293,6 +296,9 @@ function makeTable(
         ? hydrate(found, { select, include, collections: collections() })
         : null;
     },
+    count: async ({ where } = {}) =>
+      stored.filter((row) => matches(withRecords(row, collections()), where))
+        .length,
     create: async ({ data }) => {
       const created: Row = {
         id: `${idPrefix}-${nextSerial(stored, idPrefix)}`,
@@ -428,10 +434,19 @@ function hydrate(
 
     if (!relation) continue;
 
-    hydrated[name] =
-      collections?.[relation.collection].find(
-        (candidate) => candidate.id === row[relation.column],
-      ) ?? null;
+    const related = collections?.[relation.collection].find(
+      (candidate) => candidate.id === row[relation.column],
+    );
+
+    // A relation asked for with its own query resolves through that query, so a
+    // read that includes the patient of the visit it includes is answered with
+    // the same patient the database would join.
+    hydrated[name] = related
+      ? hydrate(related, {
+          ...(typeof query === "object" ? query : {}),
+          collections,
+        })
+      : null;
   }
 
   return hydrated;
@@ -461,7 +476,9 @@ function sort(
   rows: Row[],
   orderBy: Record<string, "asc" | "desc"> | undefined,
 ) {
-  for (const [field, direction] of Object.entries(orderBy ?? {})) {
+  // Applied from the least significant key, because each `sort` is stable: the
+  // first key named has to be the one that decides, the way SQL orders by it.
+  for (const [field, direction] of Object.entries(orderBy ?? {}).reverse()) {
     rows.sort((left, right) => compare(left[field], right[field], direction));
   }
 }
@@ -504,6 +521,9 @@ function matchesField(value: unknown, condition: unknown): boolean {
     if (condition.in !== undefined) {
       return (condition.in as unknown[]).includes(value);
     }
+    // `not: null` is how a read asks for the archived rows, the mirror of every
+    // active rule in the clinical reads.
+    if (condition.not !== undefined) return value !== condition.not;
     // A condition over a joined record, such as the archived patient a visit
     // would otherwise inherit.
     if (isRecord(value) && !hasOperator(condition)) {
@@ -542,14 +562,35 @@ function compareDates(value: unknown, bound: unknown): number {
   return left === right ? 0 : left < right ? -1 : 1;
 }
 
+/**
+ * Orders two values the way the database orders them.
+ *
+ * Dates and instants compare as moments, and anything else compares as text — an id
+ * is ordered as text, which is what the id tie-break in an archive list relies on.
+ * Treating an id as a date would make every id the same value and leave the rows in
+ * whatever order they were stored in, which is the one thing a tie-break exists to
+ * prevent.
+ */
 function compare(
   left: unknown,
   right: unknown,
   direction: "asc" | "desc",
 ): number {
-  const order = compareDates(left, right);
+  const order =
+    left instanceof Date || right instanceof Date
+      ? compareDates(left, right)
+      : compareText(left, right);
 
   return direction === "desc" ? -order : order;
+}
+
+function compareText(left: unknown, right: unknown): number {
+  const leftText = String(left);
+  const rightText = String(right);
+
+  if (leftText === rightText) return 0;
+
+  return leftText < rightText ? -1 : 1;
 }
 
 function time(value: unknown): number {

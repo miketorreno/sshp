@@ -32,6 +32,7 @@ vi.mock("next/navigation", () => ({
 import {
   createPatient,
   archivePatient,
+  restorePatient,
   updatePatient,
 } from "@/app/actions/patient-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
@@ -69,6 +70,16 @@ const ACTIVE_PATIENT = {
   updatedAt: new Date("2026-01-02T03:04:05.000Z"),
   deletedAt: null as Date | null,
 };
+
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
+
+const ARCHIVED_PATIENT = { ...ACTIVE_PATIENT, deletedAt: ARCHIVED_AT };
 
 const seed = (...patients: Record<string, unknown>[]) => {
   table.rows.splice(0, table.rows.length, ...patients);
@@ -130,6 +141,7 @@ describe("patient form commands", () => {
       updatePatient(patientForm({ id: "patient-1" }))
     ).resolves.toEqual(signedOut);
     await expect(archivePatient("patient-1")).resolves.toEqual(signedOut);
+    await expect(restorePatient("patient-1")).resolves.toEqual(signedOut);
 
     expect(table.rows).toEqual([ACTIVE_PATIENT]);
     expect(redirect).not.toHaveBeenCalled();
@@ -260,6 +272,53 @@ describe("patient form commands", () => {
 
     it("reports an unknown patient", async () => {
       await expect(archivePatient("patient-404")).resolves.toEqual({
+        ok: false,
+        error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
+      });
+    });
+  });
+  describe("restore", () => {
+    beforeEach(() => {
+      getSession.mockResolvedValue(ADMIN);
+      // A fresh row each time: `seed` stores the object it is given, and a command
+      // restores the row it finds in place, so a shared fixture would come back
+      // already restored for the next case.
+      seed({ ...ARCHIVED_PATIENT });
+    });
+
+    it("restores the patient and revalidates the lists the row returns to", async () => {
+      const result = await restorePatient("patient-1");
+
+      expect(result).toMatchObject({ ok: true, data: { id: "patient-1" } });
+      expect(table.find("patient-1")?.deletedAt).toBeNull();
+
+      // The lists and the report are the server-rendered paths the row comes back to.
+      // The archive itself is a client query rather than a rendered page, so the
+      // caller invalidates that instead.
+      expect(revalidatePath.mock.calls.flat()).toEqual([
+        "/patients/all",
+        "/patients/reports",
+        "/patients/patient-1",
+      ]);
+      expect(redirect).not.toHaveBeenCalled();
+    });
+
+    it("refuses a clinician, who may archive a patient but not bring one back", async () => {
+      getSession.mockResolvedValue(SESSION);
+
+      await expect(restorePatient("patient-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.FORBIDDEN,
+          message: FAILURE_MESSAGES.FORBIDDEN,
+        },
+      });
+      expect(table.find("patient-1")?.deletedAt).toEqual(ARCHIVED_AT);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("reports an unknown patient rather than restoring nothing quietly", async () => {
+      await expect(restorePatient("patient-404")).resolves.toEqual({
         ok: false,
         error: { code: FAILURE_CODES.NOT_FOUND, message: "Patient not found" },
       });

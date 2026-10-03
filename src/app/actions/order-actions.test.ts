@@ -24,6 +24,9 @@ import {
   requestImagingOrder,
   requestLabOrder,
   requestMedicationOrder,
+  restoreImagingOrder,
+  restoreLabOrder,
+  restoreMedicationOrder,
 } from "@/app/actions/order-actions";
 import { FAILURE_CODES, FAILURE_MESSAGES } from "@/lib/action-result";
 import {
@@ -38,6 +41,14 @@ import {
 
 const seed = (rows?: Parameters<typeof seedVisits>[1]) =>
   seedVisits(table, rows);
+
+/** Only an administrator restores; see ADR 0005. */
+const ADMIN = {
+  ...SESSION,
+  user: { ...SESSION.user, role: "ADMIN" },
+};
+
+const ARCHIVED_AT = new Date("2026-04-01T08:00:00.000Z");
 
 function orderForm(fields: Record<string, string> = {}) {
   const form = new FormData();
@@ -256,5 +267,77 @@ describe("order form commands", () => {
     expect(table.findMedOrder("med-order-1")?.deletedAt).toBeInstanceOf(Date);
     expect(table.destroyed).toEqual([]);
     expect(revalidatePath).toHaveBeenCalledWith("/visits/visit-1");
+  });
+  describe("restore", () => {
+    /**
+     * An archived order of each kind, in a visit that is still active. Fresh rows
+     * each time: a command restores the row it finds in place, so a shared fixture
+     * would come back already restored for the next case.
+     */
+    const seedArchivedOrders = () => {
+      getSession.mockResolvedValue(ADMIN);
+      seed({
+        labOrders: [labOrder({ deletedAt: ARCHIVED_AT })],
+        imagingOrders: [imagingOrder({ deletedAt: ARCHIVED_AT })],
+        medOrders: [medOrder({ deletedAt: ARCHIVED_AT })],
+        medications: [medication()],
+      });
+    };
+
+    it.each([
+      ["lab", restoreLabOrder, "lab-order-1"],
+      ["imaging", restoreImagingOrder, "imaging-order-1"],
+      ["medication", restoreMedicationOrder, "med-order-1"],
+    ] as const)(
+      "restores a %s order into the visit it was requested in",
+      async (_kind, restore, orderId) => {
+        seedArchivedOrders();
+
+        const result = await restore("visit-1", orderId);
+
+        expect(result).toMatchObject({ ok: true, data: { id: orderId } });
+        expect(revalidatePath.mock.calls.flat()).toEqual(["/visits/visit-1"]);
+      },
+    );
+
+    it.each([
+      ["lab", restoreLabOrder, "lab-order-1"],
+      ["imaging", restoreImagingOrder, "imaging-order-1"],
+      ["medication", restoreMedicationOrder, "med-order-1"],
+    ] as const)(
+      "refuses a clinician restoring a %s order",
+      async (_kind, restore, orderId) => {
+        seedArchivedOrders();
+        getSession.mockResolvedValue(SESSION);
+
+        await expect(restore("visit-1", orderId)).resolves.toEqual({
+          ok: false,
+          error: {
+            code: FAILURE_CODES.FORBIDDEN,
+            message: FAILURE_MESSAGES.FORBIDDEN,
+          },
+        });
+        expect(revalidatePath).not.toHaveBeenCalled();
+      },
+    );
+
+    it("reports an order whose visit is still archived", async () => {
+      // The visit comes back before the order does, so this refusal is what the
+      // archive screen leads with: restore the visit first.
+      getSession.mockResolvedValue(ADMIN);
+      seed({
+        visits: [visit({ deletedAt: ARCHIVED_AT })],
+        labOrders: [labOrder({ deletedAt: ARCHIVED_AT })],
+      });
+
+      await expect(restoreLabOrder("visit-1", "lab-order-1")).resolves.toEqual({
+        ok: false,
+        error: {
+          code: FAILURE_CODES.NOT_FOUND,
+          message: "Orders are requested against a visit that is still active.",
+        },
+      });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
   });
 });

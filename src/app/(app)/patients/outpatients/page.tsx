@@ -21,6 +21,8 @@ import { useRouter } from "next/navigation";
 import { calculateAge, formatClinicTime, toDateInputValue } from "@/lib/clinic-time";
 import Link from "next/link";
 import { useVisitList } from "@/client/visits/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 /**
  * Today's Outpatients is the clinic day's list read: it asks the canonical visit
@@ -31,6 +33,10 @@ const OutpatientsPage = () => {
   // The clinic's zone, read from the server-rendered tree: a client component
   // cannot read `process.env`, so it is handed down. See ADR 0004.
   const zone = useClinicTimeZone();
+
+  // Opening a visit, editing one, and booking an appointment are three separate
+  // capabilities. A role that reads visits is not thereby a role that opens them.
+  const { can } = usePermissions();
 
   const router = useRouter();
   const today = toDateInputValue(new Date(), zone);
@@ -63,12 +69,14 @@ const OutpatientsPage = () => {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold my-2">Today&apos;s Outpatients</h1>
-        <Link href="/visits/checkin">
-          <Button type="button">
-            <UserCheck2 />
-            Patient Check-in
-          </Button>
-        </Link>
+        {can(PERMISSIONS.VISITS_WRITE) && (
+          <Link href="/visits/checkin">
+            <Button type="button">
+              <UserCheck2 />
+              Patient Check-in
+            </Button>
+          </Link>
+        )}
       </div>
 
       <Card>
@@ -138,22 +146,26 @@ const OutpatientsPage = () => {
                           >
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(`/visits/${outpatient.id}/edit`)
-                            }
-                          >
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(
-                                `/appointments/add?patient=${outpatient.patient.id}`,
-                              )
-                            }
-                          >
-                            Schedule Appointment
-                          </DropdownMenuItem>
+                          {can(PERMISSIONS.VISITS_WRITE) && (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(`/visits/${outpatient.id}/edit`)
+                              }
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                router.push(
+                                  `/appointments/add?patient=${outpatient.patient.id}`,
+                                )
+                              }
+                            >
+                              Schedule Appointment
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

@@ -1,5 +1,6 @@
 "use client";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import type { NavigationItem } from "@/components/navigation";
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,20 +16,12 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
-export function NavMain({
-  items,
-}: {
-  items: {
-    title: string;
-    url: string;
-    icon?: LucideIcon;
-    isActive?: boolean;
-    items?: {
-      title: string;
-      url: string;
-    }[];
-  }[];
-}) {
+/**
+ * Draws navigation a role may use. The filtering is not done here: this renders
+ * what it is given, so the same tree can be drawn for a clinician or checked in a
+ * test without a React tree around it.
+ */
+export function NavMain({ items }: { items: NavigationItem[] }) {
   return (
     <SidebarGroup>
       {/* <SidebarGroupLabel>Platform</SidebarGroupLabel> */}

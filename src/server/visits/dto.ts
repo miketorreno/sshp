@@ -4,12 +4,20 @@
  * the patient, provider and clinical fields the visit views render.
  */
 
+import type { RestoreBlockedBy } from "@/server/archive/contract";
+import {
+  restoreBlockedBy,
+  toArchivedAt,
+  toPatientRef,
+  type ArchivedPatientRef,
+} from "@/server/archive/dto";
 import type {
   ClinicalNote,
   Diagnosis,
   ImagingOrder,
   LabOrder,
   MedicationOrder,
+  OrderStatus,
   Patient,
   Procedure,
   Role,
@@ -289,5 +297,189 @@ function toVisitMedicationOrder(
     route: order.route,
     notes: order.notes,
     orderedBy: order.orderedBy ? toVisitProvider(order.orderedBy) : null,
+  };
+}
+
+/**
+ * The archived-record read models the archive lists.
+ *
+ * Three records, because a visit and the readings and orders taken during it are
+ * archived and restored in three turns: the archive unwinds from the visit down.
+ */
+
+/** An archived visit, as the archive lists it. */
+export type ArchivedVisitDto = {
+  id: string;
+  visitType: VisitType;
+  startDateTime: string;
+  endDateTime: string | null;
+  reason: string | null;
+  patient: ArchivedPatientRef;
+  /** When the visit was archived, as an instant the browser can read. */
+  archivedAt: string;
+  restoreBlockedBy: RestoreBlockedBy | null;
+};
+
+/** A vitals row with the visit it was taken during and that visit's patient. */
+type ArchivedVitalsRow = Vitals & {
+  recordedBy: User | null;
+  visit: Visit & { patient: Patient };
+};
+
+/**
+ * An archived reading.
+ *
+ * The readings as they were taken, plus the visit and patient it belongs to. The
+ * readings are `VisitVitalsDto` rather than a shorter list because recognising the
+ * record means reading the numbers, and a second shape for the same measurements
+ * would be a second thing to keep in step with the schema.
+ */
+export type ArchivedVitalsDto = VisitVitalsDto & {
+  visitId: string;
+  patient: ArchivedPatientRef;
+  archivedAt: string;
+  restoreBlockedBy: RestoreBlockedBy | null;
+};
+
+/** Which table an archived order came from, which is how a restore is addressed. */
+export type ArchivedOrderKind = "LAB" | "IMAGING" | "MEDICATION";
+
+/**
+ * An archived order of any of the three kinds, as one row.
+ *
+ * The three order tables are separate in the database and one thing to a reader, so
+ * one row carries which table it came from: `kind` is what tells a caller which of
+ * the three restore commands to call, and `orderName`/`instructions` hold whichever
+ * of them says something the other two do not.
+ */
+export type ArchivedOrderDto = {
+  kind: ArchivedOrderKind;
+  id: string;
+  visitId: string;
+  orderedAt: string;
+  orderStatus: OrderStatus;
+  /** What was ordered: the lab test, the imaging study, or the medication. */
+  orderName: string | null;
+  /** How it was ordered. Only a medication order says, in its own three fields. */
+  instructions: string | null;
+  patient: ArchivedPatientRef;
+  archivedAt: string;
+  restoreBlockedBy: RestoreBlockedBy | null;
+};
+
+/** What the three kinds of order share, so one mapper can carry it. */
+type ArchivedOrderRow = {
+  id: string;
+  visitId: string;
+  orderedAt: Date;
+  orderStatus: OrderStatus;
+  deletedAt: Date | null;
+  visit: Visit & { patient: Patient };
+};
+
+export type ArchivedLabOrder = LabOrder & ArchivedOrderRow;
+export type ArchivedImagingOrder = ImagingOrder & ArchivedOrderRow;
+export type ArchivedMedicationOrder = MedicationOrder &
+  ArchivedOrderRow & { medication: { name: string } | null };
+
+/**
+ * An order from any of the three tables, tagged with the table it came from.
+ *
+ * Tagged rather than merged into one row type because the three rows are not the
+ * same row: a lab order names a test and a medication order names a drug and how to
+ * take it. The tag is what lets one list carry all three and still say which table
+ * each row came from.
+ */
+export type TaggedArchivedOrder =
+  | { kind: "LAB"; order: ArchivedLabOrder }
+  | { kind: "IMAGING"; order: ArchivedImagingOrder }
+  | { kind: "MEDICATION"; order: ArchivedMedicationOrder };
+
+/** A visit row with the patient it belongs to, which is all the archive reads. */
+type ArchivedVisitRow = Visit & { patient: Patient };
+
+export function toArchivedVisit(visit: ArchivedVisitRow): ArchivedVisitDto {
+  return {
+    id: visit.id,
+    visitType: visit.visitType,
+    startDateTime: visit.startDateTime.toISOString(),
+    endDateTime: visit.endDateTime ? visit.endDateTime.toISOString() : null,
+    reason: visit.reason,
+    patient: toPatientRef(visit.patient),
+    archivedAt: toArchivedAt(visit.deletedAt),
+    restoreBlockedBy: restoreBlockedBy({ patient: visit.patient }),
+  };
+}
+
+export function toArchivedVitals(vitals: ArchivedVitalsRow): ArchivedVitalsDto {
+  return {
+    ...toVisitVitals(vitals),
+    visitId: vitals.visitId,
+    patient: toPatientRef(vitals.visit.patient),
+    archivedAt: toArchivedAt(vitals.deletedAt),
+    restoreBlockedBy: restoreBlockedBy({
+      patient: vitals.visit.patient,
+      visit: vitals.visit,
+    }),
+  };
+}
+
+/** The archived row for a tagged order, whichever table it came from. */
+export function toArchivedOrder(row: TaggedArchivedOrder): ArchivedOrderDto {
+  if (row.kind === "LAB") return toArchivedLabOrder(row.order);
+  if (row.kind === "IMAGING") return toArchivedImagingOrder(row.order);
+
+  return toArchivedMedicationOrder(row.order);
+}
+
+export function toArchivedLabOrder(order: ArchivedLabOrder): ArchivedOrderDto {
+  return archivedOrder(order, {
+    kind: "LAB",
+    orderName: order.labType,
+    instructions: null,
+  });
+}
+
+export function toArchivedImagingOrder(
+  order: ArchivedImagingOrder,
+): ArchivedOrderDto {
+  return archivedOrder(order, {
+    kind: "IMAGING",
+    orderName: order.imagingType,
+    instructions: null,
+  });
+}
+
+export function toArchivedMedicationOrder(
+  order: ArchivedMedicationOrder,
+): ArchivedOrderDto {
+  return archivedOrder(order, {
+    kind: "MEDICATION",
+    // A medication can be removed from the catalogue while an order naming it
+    // stands, so the name is absent rather than invented.
+    orderName: order.medication?.name ?? null,
+    instructions: `${order.dosage}, ${order.frequency}, ${order.route}`,
+  });
+}
+
+function archivedOrder(
+  order: ArchivedOrderRow,
+  of: Pick<ArchivedOrderDto, "kind" | "orderName" | "instructions">,
+): ArchivedOrderDto {
+  return {
+    ...of,
+    id: order.id,
+    visitId: order.visitId,
+    orderedAt: order.orderedAt.toISOString(),
+    orderStatus: order.orderStatus,
+    patient: toPatientRef(order.visit.patient),
+    archivedAt: toArchivedAt(order.deletedAt),
+    // An order cannot be restored into an archived visit, and a visit under an
+    // archived patient cannot be restored at all, so the visit is named when it is
+    // archived and the patient is named when it is the patient.
+    restoreBlockedBy: restoreBlockedBy({
+      patient: order.visit.patient,
+      visit: order.visit,
+    }),
   };
 }

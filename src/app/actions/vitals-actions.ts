@@ -9,8 +9,10 @@ import {
 import { visitPage } from "@/server/visits/contract";
 import {
   archiveVitals as archiveVitalsCommand,
+  restoreVitals as restoreVitalsCommand,
   recordVitals as recordVitalsCommand,
   type VitalsArchiveResult,
+  type VitalsRestoreResult,
   type VitalsWriteResult,
 } from "@/server/visits/vitals-commands";
 import {
@@ -52,6 +54,26 @@ export async function addVitals(
     visitId,
     ...submission.input,
   });
+
+  if (!result.ok) return result;
+
+  revalidatePath(visitPage(visitId));
+
+  return result;
+}
+
+/**
+ * Reported rather than redirected, because the caller is the archive and stays in it.
+ *
+ * A reading is addressed by its visit as well as its own id, so both travel here; a
+ * reading whose visit is still archived is refused by the command, and the archive
+ * screen already names the visit to restore first.
+ */
+export async function restoreVitals(
+  visitId: string,
+  vitalsId: string,
+): Promise<ActionResult<VitalsRestoreResult>> {
+  const result = await restoreVitalsCommand(visitId, vitalsId);
 
   if (!result.ok) return result;
 

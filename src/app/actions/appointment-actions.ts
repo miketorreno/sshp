@@ -15,8 +15,10 @@ import {
   checkInAppointment as checkInAppointmentCommand,
   createAppointment as createAppointmentCommand,
   archiveAppointment as archiveAppointmentCommand,
+  restoreAppointment as restoreAppointmentCommand,
   updateAppointment as updateAppointmentCommand,
   type AppointmentArchiveResult,
+  type AppointmentRestoreResult,
   type AppointmentWriteResult,
   type CheckInResult,
 } from "@/server/appointments/commands";
@@ -88,6 +90,25 @@ export async function archiveAppointment(
   appointmentId: string,
 ): Promise<ActionResult<AppointmentArchiveResult>> {
   const result = await archiveAppointmentCommand(appointmentId);
+
+  if (!result.ok) return result;
+
+  revalidateAppointmentPages();
+
+  return result;
+}
+
+/**
+ * Reported rather than redirected, because the caller is the archive and stays in it.
+ *
+ * Only an administrator reaches this; an appointment whose patient is still archived
+ * is refused by the command, and the archive screen already names the patient to
+ * restore first.
+ */
+export async function restoreAppointment(
+  appointmentId: string,
+): Promise<ActionResult<AppointmentRestoreResult>> {
+  const result = await restoreAppointmentCommand(appointmentId);
 
   if (!result.ok) return result;
 

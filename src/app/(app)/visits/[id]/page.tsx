@@ -33,6 +33,8 @@ import {
   archiveMedicationOrder,
 } from "@/app/actions/order-actions";
 import { invalidateVisitWrites, useVisitDetail } from "@/client/visits/queries";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 import type { VisitDetailDto } from "@/server/visits/dto";
 import {
   formatMeasurement,
@@ -86,6 +88,10 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
   // The clinic's zone, read from the server-rendered tree: a client component
   // cannot read `process.env`, so it is handed down. See ADR 0004.
   const zone = useClinicTimeZone();
+
+  // A visit holds four kinds of work — editing it, ordering, recording vitals,
+  // and archiving any of the three — and a role may hold some without the rest.
+  const { can } = usePermissions();
 
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -188,7 +194,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                       </h4>
                     </Link>
                   </div>
-                  {!visit.endDateTime && (
+                  {!visit.endDateTime && can(PERMISSIONS.VISITS_WRITE) && (
                     <Link href={`/visits/${visit.id}/edit`}>
                       <Button type="button" size={"sm"}>
                         Edit Visit
@@ -264,32 +270,34 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                   <TabsTrigger value="reports">Reports</TabsTrigger>
                 </TabsList>
                 <TabsContent value="orders">
-                  <DropdownMenu>
-                    {!visit.endDateTime && (
-                      <DropdownMenuTrigger asChild className="mb-4">
-                        <Button size={"sm"}>
-                          <Plus /> Add Order
-                        </Button>
-                      </DropdownMenuTrigger>
-                    )}
-                    <DropdownMenuContent>
-                      <DropdownMenuItem>
-                        <Link href={`/visits/${visit.id}/request/lab`}>
-                          Lab
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Link href={`/visits/${visit.id}/request/imaging`}>
-                          Imaging
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Link href={`/visits/${visit.id}/request/medication`}>
-                          Medication
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {can(PERMISSIONS.ORDERS_WRITE) && (
+                    <DropdownMenu>
+                      {!visit.endDateTime && (
+                        <DropdownMenuTrigger asChild className="mb-4">
+                          <Button size={"sm"}>
+                            <Plus /> Add Order
+                          </Button>
+                        </DropdownMenuTrigger>
+                      )}
+                      <DropdownMenuContent>
+                        <DropdownMenuItem>
+                          <Link href={`/visits/${visit.id}/request/lab`}>
+                            Lab
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Link href={`/visits/${visit.id}/request/imaging`}>
+                            Imaging
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Link href={`/visits/${visit.id}/request/medication`}>
+                            Medication
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   <Table>
                     <TableHeader>
@@ -323,33 +331,37 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                             <TableCell>{labOrder.notes}</TableCell>
                             <TableCell>{labOrder.orderedBy?.name}</TableCell>
                             <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem disabled>
-                                    Edit
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      lab orders cannot be edited yet
-                                    </span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    disabled={isArchivingOrder}
-                                    onClick={() =>
-                                      archiveOrder(visit.id, "lab", labOrder.id)
-                                    }
-                                  >
-                                    Archive
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {/* The menu's one live item is Archive, which
+                                  only the roles that may archive an order have behind it. */}
+                              {can(PERMISSIONS.ORDERS_ARCHIVE) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem disabled>
+                                      Edit
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        lab orders cannot be edited yet
+                                      </span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-red-600"
+                                      disabled={isArchivingOrder}
+                                      onClick={() =>
+                                        archiveOrder(visit.id, "lab", labOrder.id)
+                                      }
+                                    >
+                                      Archive
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -372,37 +384,41 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                               {imagingOrder.orderedBy?.name}
                             </TableCell>
                             <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem disabled>
-                                    Edit
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      imaging orders cannot be edited yet
-                                    </span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    disabled={isArchivingOrder}
-                                    onClick={() =>
-                                      archiveOrder(
-                                        visit.id,
-                                        "imaging",
-                                        imagingOrder.id,
-                                      )
-                                    }
-                                  >
-                                    Archive
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {/* The menu's one live item is Archive, which
+                                  only the roles that may archive an order have behind it. */}
+                              {can(PERMISSIONS.ORDERS_ARCHIVE) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem disabled>
+                                      Edit
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        imaging orders cannot be edited yet
+                                      </span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-red-600"
+                                      disabled={isArchivingOrder}
+                                      onClick={() =>
+                                        archiveOrder(
+                                          visit.id,
+                                          "imaging",
+                                          imagingOrder.id,
+                                        )
+                                      }
+                                    >
+                                      Archive
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -423,37 +439,41 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                             <TableCell>{medOrder.notes}</TableCell>
                             <TableCell></TableCell>
                             <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem disabled>
-                                    Edit
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      medication orders cannot be edited yet
-                                    </span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    disabled={isArchivingOrder}
-                                    onClick={() =>
-                                      archiveOrder(
-                                        visit.id,
-                                        "medication",
-                                        medOrder.id,
-                                      )
-                                    }
-                                  >
-                                    Archive
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {/* The menu's one live item is Archive, which
+                                  only the roles that may archive an order have behind it. */}
+                              {can(PERMISSIONS.ORDERS_ARCHIVE) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem disabled>
+                                      Edit
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        medication orders cannot be edited yet
+                                      </span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-red-600"
+                                      disabled={isArchivingOrder}
+                                      onClick={() =>
+                                        archiveOrder(
+                                          visit.id,
+                                          "medication",
+                                          medOrder.id,
+                                        )
+                                      }
+                                    >
+                                      Archive
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -462,7 +482,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 </TabsContent>
 
                 <TabsContent value="vitals">
-                  {!visit.endDateTime && (
+                  {!visit.endDateTime && can(PERMISSIONS.VITALS_WRITE) && (
                     <Link href={`/visits/${visit.id}/vitals`}>
                       <Button type="button" size={"sm"} className="mb-4">
                         <Plus />
@@ -504,27 +524,31 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                             ))}
                             <TableCell>{vital.recordedBy?.name}</TableCell>
                             <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    disabled={isArchivingVitals}
-                                    onClick={() =>
-                                      archiveVitalsOf(visit, vital.id)
-                                    }
-                                  >
-                                    Archive
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {/* The menu's one live item is Archive, which
+                                  only the roles that may archive a vitals record have behind it. */}
+                              {can(PERMISSIONS.VITALS_ARCHIVE) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      className="text-red-600"
+                                      disabled={isArchivingVitals}
+                                      onClick={() =>
+                                        archiveVitalsOf(visit, vital.id)
+                                      }
+                                    >
+                                      Archive
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -609,7 +633,7 @@ const VisitPage = ({ params }: { params: Promise<{ id: string }> }) => {
                 <Button type="button" onClick={() => router.back()} size={"sm"}>
                   Back
                 </Button>
-                {!visit.endDateTime && (
+                {!visit.endDateTime && can(PERMISSIONS.VISITS_WRITE) && (
                   <Button
                     type="button"
                     size={"sm"}

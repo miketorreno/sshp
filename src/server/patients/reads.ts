@@ -1,5 +1,12 @@
 import { getPrisma } from "@/lib/prisma";
 import { PERMISSIONS, requirePermission } from "@/server/access";
+import type { ArchiveListQuery } from "@/server/archive/contract";
+import type { ArchivePage } from "@/server/archive/dto";
+import {
+  ARCHIVED_RECORD,
+  MOST_RECENTLY_ARCHIVED,
+  pageOf,
+} from "@/server/archive/reads";
 import {
   CHRONOLOGICAL,
   toArchiveEvent,
@@ -12,9 +19,11 @@ import {
 } from "./contract";
 import {
   toAdmittedPatient,
+  toArchivedPatient,
   toPatientDetail,
   toPatientSummary,
   type AdmittedPatientDto,
+  type ArchivedPatientDto,
   type PatientDetailDto,
   type PatientListDto,
 } from "./dto";
@@ -23,6 +32,9 @@ import {
  * Patient reads for staff screens. Every read requires a session that holds
  * `patients:read`, and every read hides archived patients: an archived record is
  * history, not something normal clinical screens show.
+ *
+ * The archive is the one exception, and it asks for `patients:archive` instead —
+ * reading the history is not reading the patient.
  */
 
 const ACTIVE_PATIENT = { deletedAt: null } as const;
@@ -100,6 +112,41 @@ function searched(term: string | undefined) {
       { email: contains },
       { patientCode: contains },
     ],
+  };
+}
+
+/**
+ * One page of archived patients, most recently archived first.
+ *
+ * The counterpart to `listPatients`, and the reason the clinical list filters on
+ * `deletedAt` at all: the rows are still there, and this is where a reader who
+ * archived something by mistake goes to find it.
+ *
+ * Reports the whole count beside the page for the reason `listPatients` does — a
+ * pager that knows only its own page has to guess whether a next page exists.
+ */
+export async function listArchivedPatients(
+  query: ArchiveListQuery = {},
+): Promise<ArchivePage<ArchivedPatientDto>> {
+  await requirePermission(PERMISSIONS.PATIENTS_ARCHIVE);
+
+  const { page, pageSize, skip, take } = pageOf(query);
+
+  const [patients, totalCount] = await Promise.all([
+    getPrisma().patient.findMany({
+      where: ARCHIVED_RECORD,
+      orderBy: MOST_RECENTLY_ARCHIVED,
+      skip,
+      take,
+    }),
+    getPrisma().patient.count({ where: ARCHIVED_RECORD }),
+  ]);
+
+  return {
+    rows: patients.map(toArchivedPatient),
+    page,
+    pageSize,
+    totalCount,
   };
 }
 

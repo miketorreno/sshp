@@ -19,6 +19,7 @@ import {
   ROLE_PERMISSIONS,
   authorize,
   can,
+  permissionsOf,
   requirePermission,
   type Permission,
 } from "@/server/access";
@@ -98,6 +99,46 @@ describe("role permissions", () => {
         expect(can("CLERK", permission)).toBe(false);
         expect(can(undefined, permission)).toBe(false);
       }
+    });
+  });
+
+  describe("the permissions a session hands to the screens", () => {
+    it("answers the matrix for the session's role, in one list", () => {
+      // One list, so the screens ask "may I" of the matrix rather than each
+      // holding a second copy of it.
+      expect(permissionsOf(sessionOf(Role.PHARMACIST))).toEqual([
+        PERMISSIONS.PATIENTS_READ,
+        PERMISSIONS.VISITS_READ,
+        PERMISSIONS.MEDICATIONS_READ,
+      ]);
+    });
+
+    it("holds nothing for no session, a patient account, or a deactivated one", () => {
+      expect(permissionsOf(null)).toEqual([]);
+      expect(permissionsOf(sessionOf(Role.PATIENT))).toEqual([]);
+      expect(permissionsOf(sessionOf(Role.ADMIN, false))).toEqual([]);
+    });
+
+    it("agrees with the boundary for every role, permission, and active flag", () => {
+      // The screens hide a control the boundary would refuse. If the two ever
+      // disagreed, the screen would promise a work the read or write rejects.
+      for (const role of Object.values(Role)) {
+        for (const isActive of [true, false]) {
+          const held = permissionsOf(sessionOf(role, isActive));
+
+          for (const permission of EVERY_PERMISSION) {
+            expect(held.includes(permission)).toBe(
+              isActive && can(role, permission),
+            );
+          }
+        }
+      }
+    });
+
+    it("names only permissions the app knows", () => {
+      const unlisted = "patients:teleport" as Permission;
+
+      expect(permissionsOf(sessionOf(Role.ADMIN))).not.toContain(unlisted);
     });
   });
 

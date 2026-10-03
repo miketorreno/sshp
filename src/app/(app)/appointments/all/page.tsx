@@ -34,11 +34,17 @@ import {
   useAppointmentList,
 } from "@/client/appointments/queries";
 import Pagination from "@/components/pagination";
+import { usePermissions } from "@/components/permissions-provider";
+import { PERMISSIONS } from "@/server/permissions";
 
 const AllAppointmentsPage = () => {
   // The clinic's zone, read from the server-rendered tree: a client component
   // cannot read `process.env`, so it is handed down. See ADR 0004.
   const zone = useClinicTimeZone();
+
+  // Checking a patient in, editing an appointment, and archiving one are three
+  // separate capabilities, and a role may hold one without the others.
+  const { can } = usePermissions();
 
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -169,14 +175,16 @@ const AllAppointmentsPage = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              disabled={appointment.checkedIn}
-                              onClick={() => checkIn(appointment.id)}
-                            >
-                              {appointment.checkedIn
-                                ? "Already checked in"
-                                : "Check In"}
-                            </DropdownMenuItem>
+                            {can(PERMISSIONS.APPOINTMENTS_CHECK_IN) && (
+                              <DropdownMenuItem
+                                disabled={appointment.checkedIn}
+                                onClick={() => checkIn(appointment.id)}
+                              >
+                                {appointment.checkedIn
+                                  ? "Already checked in"
+                                  : "Check In"}
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(`/appointments/${appointment.id}`)
@@ -184,21 +192,25 @@ const AllAppointmentsPage = () => {
                             >
                               View
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/appointments/${appointment.id}/edit`,
-                                )
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => archive(appointment.id)}
-                            >
-                              Archive
-                            </DropdownMenuItem>
+                            {can(PERMISSIONS.APPOINTMENTS_WRITE) && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/appointments/${appointment.id}/edit`,
+                                  )
+                                }
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {can(PERMISSIONS.APPOINTMENTS_ARCHIVE) && (
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => archive(appointment.id)}
+                              >
+                                Archive
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
